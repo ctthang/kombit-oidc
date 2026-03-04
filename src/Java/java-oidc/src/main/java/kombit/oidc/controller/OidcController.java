@@ -207,7 +207,7 @@ public class OidcController {
         cfg.tokenAuthMethod();
         log.info("Using authentication method: {}", cfg.tokenAuthMethod());
         
-        if (cfg.tokenAuthMethod() == OidcProperties.TokenAuthMethod.PRIVATE_KEY_JWT){
+        if (cfg.tokenAuthMethod() == OidcProperties.TokenAuthMethod.private_key_jwt){
             String clientAssertion = buildClientAssertion(cfg.clientId(), cfg.tokenEndpoint(),
                     cfg.jwtAssertionSigningCertPath(), cfg.jwtAssertionSigningCertPassword());
             form.add("client_assertion_type",

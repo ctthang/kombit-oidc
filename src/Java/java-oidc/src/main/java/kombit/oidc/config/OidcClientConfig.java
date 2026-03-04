@@ -122,16 +122,16 @@ public class OidcClientConfig {
         }
 
         switch (p.getTokenAuthMethod()) {
-            case CLIENT_SECRET_POST -> {
+            case client_secret_post -> {
                 form.add("client_id", p.getClientId());
                 form.add("client_secret", p.getClientSecret());
             }
-            case PRIVATE_KEY_JWT -> {
+            case private_key_jwt -> {
                 // form.add("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
                 // form.add("client_assertion", signedAssertion);
                 form.add("client_id", p.getClientId());
             }
-            case CLIENT_SECRET_BASIC -> {
+            case client_secret_basic -> {
 
             }
         }
@@ -144,16 +144,16 @@ public class OidcClientConfig {
         form.add("refresh_token", refreshToken);
 
         switch (p.getTokenAuthMethod()) {
-            case CLIENT_SECRET_POST -> {
+            case client_secret_post -> {
                 form.add("client_id", p.getClientId());
                 form.add("client_secret", p.getClientSecret());
             }
-            case PRIVATE_KEY_JWT -> {
+            case private_key_jwt -> {
                 // form.add("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
                 // form.add("client_assertion", signedAssertion);
                 form.add("client_id", p.getClientId());
             }
-            case CLIENT_SECRET_BASIC -> {
+            case client_secret_basic -> {
                 // dùng Basic Auth header
             }
         }
@@ -164,7 +164,7 @@ public class OidcClientConfig {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.CLIENT_SECRET_BASIC) {
+        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.client_secret_basic) {
             headers.set(HttpHeaders.AUTHORIZATION, basicAuth(p.getClientId(), p.getClientSecret()));
         }
         return headers;
@@ -177,10 +177,10 @@ public class OidcClientConfig {
             form.add("token_type_hint", tokenTypeHint); // access_token|refresh_token
         }
 
-        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.CLIENT_SECRET_POST) {
+        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.client_secret_post) {
             form.add("client_id", p.getClientId());
             form.add("client_secret", p.getClientSecret());
-        } else if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.PRIVATE_KEY_JWT) {
+        } else if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.private_key_jwt) {
             // form.add("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
             // form.add("client_assertion", signedAssertion);
             form.add("client_id", p.getClientId());
@@ -191,7 +191,7 @@ public class OidcClientConfig {
     public HttpHeaders revokeHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.CLIENT_SECRET_BASIC) {
+        if (p.getTokenAuthMethod() == OidcProperties.TokenAuthMethod.client_secret_basic) {
             headers.set(HttpHeaders.AUTHORIZATION, basicAuth(p.getClientId(), p.getClientSecret()));
         }
         return headers;
