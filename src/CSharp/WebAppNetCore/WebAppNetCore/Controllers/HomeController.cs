@@ -25,6 +25,10 @@ namespace WebAppNetCore.Controllers
 
         public IActionResult Index()
         {
+            if (EmergencyCredential.EmergencyMiddleware.IsEmergency(User))
+            {
+                return RedirectToAction("Home", "Emergency");
+            }
             
             ViewData["Origin"] = $"{Request.Scheme}://{Request.Host.Value}";
 

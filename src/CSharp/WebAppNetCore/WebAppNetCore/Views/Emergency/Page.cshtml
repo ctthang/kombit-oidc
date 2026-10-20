@@ -1,0 +1,43 @@
+@model WebAppNetCore.EmergencyCredential.EmergencyPageModel
+@{ Layout = null; }
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Emergency access — OIDC sample</title><link rel="stylesheet" href="@Url.Content("~/css/emergency.css")" /></head>
+<body><main id="emergency" data-base="@Url.Content("~/emergency")" data-mode="@Model.Mode" data-accepting="@Model.Accepting.ToString().ToLowerInvariant()">
+<nav><a href="@Url.Content("~/")">Normal application</a> <a href="@Url.Action("Login", "Emergency")">Emergency login</a> <a href="@Url.Action("OperatorPage", "Emergency")">Local operator</a></nav>
+<h1>Emergency access</h1><p class="notice">Proof of concept. This session has limited local access. It does not provide normal NSIS assurance.</p>
+@Html.AntiForgeryToken()
+<p id="message" role="status" aria-live="polite"></p>
+@if (Model.Mode == "prepare")
+{
+    <h2>Prepare this browser</h2><p>Use a key that requires user verification and does not use passkey backup. Complete both key checks before relying on emergency access.</p>
+    <p>Clearing or evicting site data loses preparation. Private browsing and another browser profile are not prepared.</p>
+    <form method="post" action="@Url.Action("NormalLogin", "Emergency")">@Html.AntiForgeryToken()<button type="submit">Get a new normal login for preparation or renewal</button></form>
+    <button id="prepare" type="button" disabled="@(!Model.CanPrepare)">Prepare this browser</button>
+    <p id="storage-warning"></p><ul id="credentials"></ul>
+    <p>If issuance succeeded but the browser did not receive or store the credential, its key may still count towards the issuer's limit. Ask the operator to remove that binding before enrolling again.</p>
+}
+else if (Model.Mode == "login")
+{
+    <h2>Local emergency login</h2>
+    @if (Model.Accepting) { <p>Select a credential stored in this browser. Identify is not contacted.</p><ul id="credentials"></ul> }
+    else { <p>Emergency acceptance is off. A local operator must activate it before you can log in.</p> }
+}
+else if (Model.Mode == "operator")
+{
+    <h2>Local operator</h2><p>Operator sessions end after 15 minutes. Keep the operator key outside the repository.</p>
+    <form id="operator-signin"><label for="operator-secret">Operator key</label><input id="operator-secret" type="password" autocomplete="current-password" maxlength="512" required /><button>Sign in locally</button></form>
+    <section id="operator-controls" hidden="@(!Model.OperatorAuthenticated)">
+        <p id="operator-state"></p><label for="minutes">Acceptance duration in minutes (0 means no window end)</label><input id="minutes" type="number" min="0" max="1440" value="60" />
+        <button id="accept-on" type="button">Activate emergency acceptance</button><button id="accept-off" type="button">Stop emergency acceptance and sessions</button>
+        <h3>Local block</h3><label for="binding">Binding ID from preparation</label><input id="binding" maxlength="128" /><label><input id="whole-account" type="checkbox" />Block this account's keys</label><button id="block" type="button">Block locally</button>
+        <h3>Explicit online synchronization</h3><p>This action contacts Identify to refresh trust keys, apply revocations, and retry removal reports. Emergency login itself never does this.</p><button id="poll" type="button">Synchronize with Identify now</button>
+        <button id="operator-signout" type="button">Sign out operator</button><h3>Recent local events</h3><ul id="audit"></ul>
+    </section>
+}
+else
+{
+    <h2>Session ended</h2><p>Your emergency session expired or local access is unavailable. A fresh key check is required after the operator enables acceptance.</p>
+}
+<noscript>This feature requires JavaScript and a browser with WebAuthn and IndexedDB.</noscript>
+</main><script src="@Url.Content("~/js/emergency-credential.js")" defer></script></body></html>
