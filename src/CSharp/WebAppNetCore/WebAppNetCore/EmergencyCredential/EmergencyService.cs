@@ -31,15 +31,17 @@ namespace WebAppNetCore.EmergencyCredential
         public bool Accepting => store.Read(state => IsAccepting(state, Now));
         private static bool IsAccepting(LocalState state, long now) => state.Acceptance && (state.AcceptanceUntil == 0 || state.AcceptanceUntil > now);
 
-        public string Capture(string browser, string subject, string normalIssuer, string reference, long expires)
+        public string Capture(string browser, string subject, string normalIssuer, string reference, long expires, IReadOnlyList<SnapshotClaim> normalClaims = null)
         {
             if (normalIssuer != options.NormalIssuer || string.IsNullOrEmpty(subject) || subject.Length > 1024
                 || string.IsNullOrEmpty(reference) || reference.Length > 1024 || expires <= Now) { throw new EmergencyFault(403, "normal_login_not_eligible"); }
+            var capturedClaims = normalClaims == null ? null : NormalAccessTokenSnapshot.Copy(normalClaims);
+            if (options.UseNormalAccessTokenClaims && capturedClaims == null) { throw new EmergencyFault(403, "normal_access_token_not_eligible"); }
             lock (store.Gate)
             {
                 Cleanup();
                 if (logins.Count >= 2000) { throw new EmergencyFault(503, "login_capacity"); }
-                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800 };
+                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800, NormalAccessTokenClaims = capturedClaims };
                 logins.Add(login.Id, login);
                 return login.Id;
             }
@@ -150,7 +152,7 @@ namespace WebAppNetCore.EmergencyCredential
                     if (expectedBinding != null || state.Bindings.Count >= 10000 || state.Bindings.Values.Any(binding => binding.CredentialId == verified.CredentialId)) { throw new EmergencyFault(409, "binding_conflict"); }
                     state.Bindings.Add(bindingId, new LocalBinding { Id = bindingId, Subject = verified.Subject, CredentialId = verified.CredentialId, UserHandle = verified.UserHandle, CoseKey = verified.CoseKey, Counter = verified.Counter });
                 }
-                state.Credentials.Add(verified.Id, new RegistryEntry { BindingId = bindingId, Credential = verified });
+                state.Credentials.Add(verified.Id, new RegistryEntry { BindingId = bindingId, Credential = verified, NormalAccessTokenClaims = login.NormalAccessTokenClaims == null ? null : NormalAccessTokenSnapshot.Copy(login.NormalAccessTokenClaims) });
                 Audit(state, "credential_pending");
                 return true;
             });
@@ -234,6 +236,7 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 throw new EmergencyFault(403, "credential_unavailable");
             }
+            if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null) { throw new EmergencyFault(409, "credential_renewal_required"); }
             return entry;
         }
         private static LocalBinding OwnedBinding(LocalState state, string id, string subject)
@@ -256,20 +259,23 @@ namespace WebAppNetCore.EmergencyCredential
                 identity.AddClaim(new Claim("emergency_expires", session.Expires.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                 identity.AddClaim(new Claim("emergency", "true"));
                 identity.AddClaim(new Claim("local_assurance", "emergency-possession"));
-                foreach (SnapshotClaim claim in entry.Credential.Claims)
+                if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null) { return null; }
+                foreach (SnapshotClaim claim in options.UseNormalAccessTokenClaims ? entry.NormalAccessTokenClaims : entry.Credential.Claims)
                 {
-                    if (!options.AllowedClaimTypes.Contains(claim.Type, StringComparer.Ordinal) || Reserved(claim.Type)) { continue; }
-                    if ((claim.Type == "role" || claim.Type == ClaimTypes.Role) && !options.AllowedRoles.Contains(claim.Value, StringComparer.Ordinal)) { continue; }
+                    if ((!options.PreserveNormalClaims && !options.AllowedClaimTypes.Contains(claim.Type, StringComparer.Ordinal)) || Reserved(claim.Type)) { continue; }
+                    if ((string.Equals(claim.Type, "role", StringComparison.OrdinalIgnoreCase) || string.Equals(claim.Type, ClaimTypes.Role, StringComparison.OrdinalIgnoreCase)) && !options.AllowedRoles.Contains(claim.Value, StringComparer.Ordinal)) { continue; }
                     identity.AddClaim(new Claim(claim.Type, claim.Value, claim.ValueType));
                 }
+                string display = identity.FindFirst("name")?.Value ?? identity.FindFirst(ClaimTypes.Name)?.Value;
+                if (!string.IsNullOrWhiteSpace(display)) { identity.RemoveClaim(identity.FindFirst("emergency_display")); identity.AddClaim(new Claim("emergency_display", display)); }
                 return new ClaimsPrincipal(identity);
             });
         }
-        private static bool Reserved(string type)
+        internal static bool Reserved(string type)
         {
             string lower = type.ToLowerInvariant();
             return lower.StartsWith("emergency", StringComparison.Ordinal) || lower.StartsWith("local_", StringComparison.Ordinal)
-                || new[] { "acr", "amr", "sid", "sub", "iss", "aud", "jti", "iat", "nbf", "exp", "auth_time", "session_state" }.Contains(lower)
+                || new[] { "client_id", "azp", "scope", "scp", "cnf", "act", "may_act", "token_usage", "confidentiality_level", "nonce", "at_hash", "c_hash", "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod", "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationinstant", "http://schemas.microsoft.com/claims/authnmethodsreferences", "http://schemas.microsoft.com/claims/authnclassreference", "acr", "amr", "sid", "sub", "iss", "aud", "jti", "iat", "nbf", "exp", "auth_time", "session_state" }.Contains(lower)
                 || lower.Contains("token") || lower.Contains("bootstrap") || lower.Contains("assurance") || lower.Contains("/loa") || lower.Contains("privilege");
         }
         public void SignOut(string id)

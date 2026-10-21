@@ -14,7 +14,9 @@
     "TrustedSigningKeysFile": "C:\\ProgramData\\SafewhereSamples\\OidcEmergency\\issuer-signing-keys.json",
     "ApiKeyEnvironmentVariable": "OIDC_EMERGENCY_ISSUER_KEY",
     "OperatorKeyEnvironmentVariable": "OIDC_EMERGENCY_OPERATOR_KEY",
-    "AllowedClaimTypes": ["email", "role"],
+    "UseNormalAccessTokenClaims": true,
+      "PreserveNormalClaims": true,
+      "AllowedClaimTypes": ["email", "role"],
     "AllowedRoles": ["read-only"],
     "SessionMinutes": 480
   }

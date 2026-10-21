@@ -7,15 +7,47 @@
     const message = text => { document.getElementById('message').textContent = text; };
     const decode = text => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - text.length % 4) % 4)), c => c.charCodeAt(0));
     const encode = buffer => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+    const traceKey = 'oidc-emergency-issuer-results-v1';
+    let callHistory = [];
+    try { const saved = JSON.parse(sessionStorage.getItem(traceKey) || '[]'); if (Array.isArray(saved)) callHistory = saved.slice(-40).filter(x => typeof x === 'string').map(x => x.slice(0, 600)); } catch (_) { }
+    function renderIssuerCalls() {
+        const list = document.getElementById('issuer-call-results');
+        if (!list) return;
+        list.replaceChildren();
+        for (const text of callHistory.slice().reverse()) { const item = document.createElement('li'); item.textContent = text; list.append(item); }
+        if (!callHistory.length) { const item = document.createElement('li'); item.textContent = 'No calls recorded in this tab yet. Perform preparation, renewal, removal, or operator synchronization to see Identify results.'; list.append(item); }
+    }
+    function recordIssuerCalls(response) {
+        try {
+            const header = response.headers.get('X-Emergency-Issuer-Calls');
+            const stamp = new Date().toLocaleTimeString();
+            if (!header) callHistory.push(stamp + ' — No issuer diagnostics received (older server or request rejected before the handler).');
+            else {
+                const calls = JSON.parse(atob(header));
+                if (!Array.isArray(calls)) return;
+                if (!calls.length) callHistory.push(stamp + ' — Local request: HTTP ' + response.status + '; no Identify endpoint called.');
+                for (const call of calls.slice(-8)) callHistory.push((stamp + ' — ' + call.method + ' ' + call.endpoint + ' — ' + (call.status == null ? 'no HTTP status' : 'HTTP ' + call.status) + ' — ' + call.milliseconds + ' ms — ' + call.summary).slice(0, 600));
+            }
+            callHistory = callHistory.slice(-40);
+            try { sessionStorage.setItem(traceKey, JSON.stringify(callHistory)); } catch (_) { }
+            renderIssuerCalls();
+        } catch (_) { /* Diagnostics must never interrupt authentication. */ }
+    }
+    const clearTrace = document.getElementById('clear-issuer-diagnostics');
+    if (clearTrace) clearTrace.addEventListener('click', () => { callHistory = []; try { sessionStorage.removeItem(traceKey); } catch (_) { } renderIssuerCalls(); });
+    renderIssuerCalls();
+
     async function api(path, body = {}) {
         const response = await fetch(base + '/' + path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Emergency-CSRF': csrf }, body: JSON.stringify(body), redirect: 'error' });
+        recordIssuerCalls(response);
         const data = response.status === 204 ? {} : await response.json();
         if (!response.ok) throw new Error(data.error || 'Request failed');
         return data;
     }
     const safe = action => async event => {
         if (event) event.preventDefault();
-        try { message('Working…'); await action(); } catch (error) { message(error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.'); }
+        try { message('Working…'); await action(); if (document.getElementById('message').textContent === 'Working…') message(''); } catch (error) { message(error.message === 'new_normal_login_required' ? 'Emergency preparation needs a fresh normal login. Use the Get a new normal login for preparation or renewal button, then try again.' : error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.'); }
     };
     function bind(id, action, event = 'click') { const element = document.getElementById(id); if (element) element.addEventListener(event, safe(action)); }
     async function database() {
@@ -99,7 +131,7 @@
             }
             ul.append(row);
         }
-        if (!ul.children.length) { const empty = document.createElement('li'); empty.textContent = 'This browser has no matching stored credential. Preparation requires a normal login.'; ul.append(empty); }
+        if (!ul.children.length) { const empty = document.createElement('li'); empty.textContent = status && status.can_prepare ? 'This browser has no stored emergency credential yet. Choose Prepare this browser to create one.' : root.dataset.mode === 'prepare' ? 'This browser has no matching stored credential. Get a new normal login to prepare it.' : 'This browser has no stored emergency credential. Prepare it during a normal login before an outage.'; ul.append(empty); }
     }
     async function operatorStatus() {
         const status = await api('operator/status');

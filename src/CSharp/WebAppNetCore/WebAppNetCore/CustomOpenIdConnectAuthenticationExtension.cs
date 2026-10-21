@@ -236,7 +236,7 @@ namespace WebAppNetCore
                 {
                     Console.WriteLine("OnTokenValidated.");
                     string sessionState = context.HttpContext.Items["oidc_session_state"] as string;
-                    try { EmergencyCredential.EmergencyOidcEvents.Stage(context); } catch (Exception) { }
+                    try { await EmergencyCredential.EmergencyOidcEvents.StageAsync(context); } catch (Exception) { }
                     if (!string.IsNullOrEmpty(sessionState))
                     {
                         ClaimsIdentity identity = context.Principal.Identity as ClaimsIdentity;

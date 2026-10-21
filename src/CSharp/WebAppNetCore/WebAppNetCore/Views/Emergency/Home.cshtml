@@ -1,10 +1,11 @@
 @{ Layout = null; }
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Emergency session — OIDC sample</title><link rel="stylesheet" href="@Url.Content("~/css/emergency.css")" /></head>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Emergency session — OIDC sample</title><link rel="stylesheet" href="~/css/emergency.css" asp-append-version="true" /></head>
 <body><main id="emergency" data-base="@Url.Content("~/emergency")" data-mode="home">
 <h1>Emergency session</h1><p class="notice">Local emergency access. Normal token actions, federated logout, and session iframes are unavailable.</p>
 <p>Session ends: @DateTimeOffset.FromUnixTimeSeconds(long.Parse(User.FindFirst("emergency_expires").Value)).ToString("u")</p>
 @Html.AntiForgeryToken()<button id="signout" type="button">Sign out locally</button><p id="message" role="status"></p>
 <h2>Permitted claims</h2><dl>
 @foreach (var claim in User.Claims.Where(claim => claim.Type != "emergency_session_id")) { <dt>@claim.Type</dt><dd>@claim.Value</dd> }
-</dl></main><script src="@Url.Content("~/js/emergency-credential.js")" defer></script></body></html>
+</dl><details id="issuer-diagnostics"><summary>Identify endpoint results (PoC)</summary><p>Results from this browser tab only. Up to 8 latest Identify calls per action and 40 recent entries are shown. Bodies, keys, tokens, and personal claims are omitted. HTTP success alone does not mean preparation or login succeeded.</p><button id="clear-issuer-diagnostics" type="button">Clear displayed history</button><ol id="issuer-call-results"></ol></details>
+</main><script src="~/js/emergency-credential.js" asp-append-version="true" defer></script></body></html>

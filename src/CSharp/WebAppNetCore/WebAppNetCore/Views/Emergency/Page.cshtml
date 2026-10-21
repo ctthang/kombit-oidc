@@ -2,7 +2,7 @@
 @{ Layout = null; }
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Emergency access — OIDC sample</title><link rel="stylesheet" href="@Url.Content("~/css/emergency.css")" /></head>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Emergency access — OIDC sample</title><link rel="stylesheet" href="~/css/emergency.css" asp-append-version="true" /></head>
 <body><main id="emergency" data-base="@Url.Content("~/emergency")" data-mode="@Model.Mode" data-accepting="@Model.Accepting.ToString().ToLowerInvariant()">
 <nav><a href="@Url.Content("~/")">Normal application</a> <a href="@Url.Action("Login", "Emergency")">Emergency login</a> <a href="@Url.Action("OperatorPage", "Emergency")">Local operator</a></nav>
 <h1>Emergency access</h1><p class="notice">Proof of concept. This session has limited local access. It does not provide normal NSIS assurance.</p>
@@ -12,7 +12,7 @@
 {
     <h2>Prepare this browser</h2><p>Use a key that requires user verification and does not use passkey backup. Complete both key checks before relying on emergency access.</p>
     <p>Clearing or evicting site data loses preparation. Private browsing and another browser profile are not prepared.</p>
-    <form method="post" action="@Url.Action("NormalLogin", "Emergency")">@Html.AntiForgeryToken()<button type="submit">Get a new normal login for preparation or renewal</button></form>
+    <p><a id="normal-login" class="button-link" href="@Url.Action("NormalLogin", "Emergency")">Get a new normal login for preparation or renewal</a></p>
     <button id="prepare" type="button" disabled="@(!Model.CanPrepare)">Prepare this browser</button>
     <p id="storage-warning"></p><ul id="credentials"></ul>
     <p>If issuance succeeded but the browser did not receive or store the credential, its key may still count towards the issuer's limit. Ask the operator to remove that binding before enrolling again.</p>
@@ -40,4 +40,5 @@ else
     <h2>Session ended</h2><p>Your emergency session expired or local access is unavailable. A fresh key check is required after the operator enables acceptance.</p>
 }
 <noscript>This feature requires JavaScript and a browser with WebAuthn and IndexedDB.</noscript>
-</main><script src="@Url.Content("~/js/emergency-credential.js")" defer></script></body></html>
+<details id="issuer-diagnostics"><summary>Identify endpoint results (PoC)</summary><p>Results from this browser tab only. Up to 8 latest Identify calls per action and 40 recent entries are shown. Bodies, keys, tokens, and personal claims are omitted. HTTP success alone does not mean preparation or login succeeded.</p><button id="clear-issuer-diagnostics" type="button">Clear displayed history</button><ol id="issuer-call-results"></ol></details>
+</main><script src="~/js/emergency-credential.js" asp-append-version="true" defer></script></body></html>

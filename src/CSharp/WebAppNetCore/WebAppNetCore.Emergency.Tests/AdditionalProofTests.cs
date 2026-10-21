@@ -55,7 +55,7 @@ namespace WebAppNetCore.Emergency.Tests
             using var scopeA = host.Services.CreateScope(); using var scopeB = host.Services.CreateScope();
             TokenValidatedContext a = Context(scopeA.ServiceProvider, fixture, "test-user");
             TokenValidatedContext b = Context(scopeB.ServiceProvider, fixture, "another-user");
-            EmergencyOidcEvents.Stage(a); EmergencyOidcEvents.Stage(b);
+            await EmergencyOidcEvents.StageAsync(a); await EmergencyOidcEvents.StageAsync(b);
             Assert.IsFalse(a.Properties.Items.ContainsKey("emergency_login")); Assert.IsFalse(b.Properties.Items.ContainsKey("emergency_login"));
             // Act
             await EmergencyOidcEvents.AcceptedAsync(new TicketReceivedContext(b.HttpContext, b.Scheme, b.Options, new AuthenticationTicket(b.Principal, b.Properties, "Cookies")));

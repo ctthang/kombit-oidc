@@ -11,17 +11,38 @@ namespace WebAppNetCore.EmergencyCredential
     public static class EmergencyOidcEvents
     {
         private const string Staged = "oidc-emergency-validated";
-        public static void Stage(TokenValidatedContext context)
+        public static async Task StageAsync(TokenValidatedContext context)
         {
             EmergencyRuntime runtime = context.HttpContext.RequestServices.GetRequiredService<EmergencyRuntime>();
             if (!runtime.Options.Enabled) { return; }
+            context.HttpContext.Items.Remove(Staged);
             string issuer, subject, id;
             long expires;
             JwtSecurityToken jwt = context.SecurityToken;
             if (jwt == null) { return; }
             issuer = jwt.Issuer; subject = jwt.Subject; id = jwt.Id;
             expires = Math.Min(new DateTimeOffset(jwt.ValidTo, TimeSpan.Zero).ToUnixTimeSeconds(), new DateTimeOffset(jwt.IssuedAt, TimeSpan.Zero).ToUnixTimeSeconds() + 600);
-            context.HttpContext.Items[Staged] = new AcceptedLogin { Issuer = issuer, Subject = subject, TokenReference = id, Expires = expires };
+            NormalAccessTokenSnapshot snapshot = null;
+            if (runtime.Options.UseNormalAccessTokenClaims)
+            {
+                // Never accept an access token supplied by a preparation API/browser request.
+                string access = context.TokenEndpointResponse?.AccessToken;
+                if (string.IsNullOrEmpty(access)) { return; }
+                var configuration = context.Options.Configuration;
+                if (configuration == null && context.Options.ConfigurationManager != null)
+                    configuration = await context.Options.ConfigurationManager.GetConfigurationAsync(context.HttpContext.RequestAborted);
+                if (configuration == null || configuration.Issuer != runtime.Options.NormalIssuer) { return; }
+                try { snapshot = NormalAccessTokenSnapshot.Validate(access, jwt, runtime.Options.NormalIssuer, context.Options.ClientId, configuration.SigningKeys); }
+                catch (Microsoft.IdentityModel.Tokens.SecurityTokenSignatureKeyNotFoundException) when (context.Options.ConfigurationManager != null)
+                {
+                    context.Options.ConfigurationManager.RequestRefresh();
+                    configuration = await context.Options.ConfigurationManager.GetConfigurationAsync(context.HttpContext.RequestAborted);
+                    if (configuration.Issuer != runtime.Options.NormalIssuer) { return; }
+                    snapshot = NormalAccessTokenSnapshot.Validate(access, jwt, runtime.Options.NormalIssuer, context.Options.ClientId, configuration.SigningKeys);
+                }
+                expires = Math.Min(expires, snapshot.Expires);
+            }
+            context.HttpContext.Items[Staged] = new AcceptedLogin { Issuer = issuer, Subject = subject, TokenReference = id, Expires = expires, NormalAccessTokenClaims = snapshot?.Claims };
         }
         public static async Task AcceptedAsync(TicketReceivedContext context)
         {
@@ -37,7 +58,7 @@ namespace WebAppNetCore.EmergencyCredential
                 context.Properties.Items.Remove("emergency_login");
                 if (context.HttpContext.Items.TryGetValue(Staged, out object staged) && staged is AcceptedLogin login)
                 {
-                    context.Properties.Items["emergency_login"] = runtime.Service.Capture(browser, login.Subject, login.Issuer, login.TokenReference, login.Expires);
+                    context.Properties.Items["emergency_login"] = runtime.Service.Capture(browser, login.Subject, login.Issuer, login.TokenReference, login.Expires, login.NormalAccessTokenClaims);
                 }
             }
             catch (Exception)

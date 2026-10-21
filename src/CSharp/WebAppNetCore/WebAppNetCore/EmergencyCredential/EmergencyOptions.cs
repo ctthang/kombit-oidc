@@ -20,6 +20,8 @@ namespace WebAppNetCore.EmergencyCredential
         public string TrustedSigningKeysFile { get; set; } = "";
         public string ApiKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_ISSUER_KEY";
         public string OperatorKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_OPERATOR_KEY";
+        public bool UseNormalAccessTokenClaims { get; set; }
+        public bool PreserveNormalClaims { get; set; }
         public string[] AllowedClaimTypes { get; set; } = new[] { "email" };
         public string[] AllowedRoles { get; set; } = Array.Empty<string>();
         public int SessionMinutes { get; set; } = 480;

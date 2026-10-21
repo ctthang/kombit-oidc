@@ -37,6 +37,8 @@ namespace WebAppNetCore.Emergency.Tests
         public Func<Task> BeforeSigningKeysResponse { get; set; }
         public string IssuerStateId { get; set; } = StrictJson.Id();
         public long RevocationSequenceOffset { get; set; }
+        public System.Collections.Generic.List<SnapshotClaim> NormalClaims { get; set; }
+        public bool OmitIssuerClaims { get; set; }
         public string AdditionalClaimValue { get; set; }
         public int Requests { get; private set; }
         private readonly RSA encryption = RSA.Create(2048);
@@ -84,7 +86,7 @@ namespace WebAppNetCore.Emergency.Tests
             Service?.Dispose();
             Service = new EmergencyService(Options, new ProtectedStateStore(Options, Protection, Verifier), Verifier, new AssertionVerifier(Options), new IssuerClient(Options, http), Clock);
         }
-        public string Login(string subject = "test-user") => Service.Capture(Browser, subject, Options.NormalIssuer, reference = StrictJson.Id(), Clock.Value.ToUnixTimeSeconds() + 600);
+        public string Login(string subject = "test-user") => Service.Capture(Browser, subject, Options.NormalIssuer, reference = StrictJson.Id(), Clock.Value.ToUnixTimeSeconds() + 600, NormalClaims);
         public async Task<JsonElement> Pending(string login)
         {
             JsonElement enrollment = await Service.EnrollAsync(login, Browser, CancellationToken.None);
@@ -124,7 +126,7 @@ namespace WebAppNetCore.Emergency.Tests
                 iss = Options.Issuer, aud = Options.Audience, sub = "test-user", jti = id, iat = now, nbf = now, exp = now + 3600, profile_version = CredentialVerifier.Profile,
                 cnf = new { jwk }, webauthn = new { credential_id = Authenticator, rp_id = Options.RelyingPartyId, origin = Options.Origin, user_handle = Handle, cose_alg = elliptic ? -7 : -257, sign_count = 0L, aaguid = Guid.Empty.ToString(), hardware_policy = "poc-uv-nonbackup" },
                 source = new { protocol = "oidc", issuer = Options.NormalIssuer, token_reference = reference ?? "synthetic-reference", accepted_at = now },
-                claims_snapshot = new[] { new { type = "email", value = "user@example.invalid", value_type = ClaimValueTypes.String }, new { type = "role", value = "read-only", value_type = ClaimValueTypes.String }, new { type = "role", value = "administrator", value_type = ClaimValueTypes.String }, new { type = "acr", value = "normal-high", value_type = ClaimValueTypes.String }, new { type = "access_token", value = "not-a-real-token", value_type = ClaimValueTypes.String }, new { type = "emergency_session_id", value = "untrusted", value_type = ClaimValueTypes.String } }
+                claims_snapshot = new[] { new { type = "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod", value = "normal-evidence", value_type = ClaimValueTypes.String }, new { type = "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationinstant", value = "normal-evidence", value_type = ClaimValueTypes.String }, new { type = "http://schemas.microsoft.com/claims/authnmethodsreferences", value = "normal-evidence", value_type = ClaimValueTypes.String }, new { type = "http://schemas.microsoft.com/claims/authnclassreference", value = "normal-evidence", value_type = ClaimValueTypes.String }, new { type = "ROLE", value = "case-admin", value_type = ClaimValueTypes.String }, new { type = "name", value = "Synthetic User", value_type = ClaimValueTypes.String }, new { type = "department", value = "A", value_type = ClaimValueTypes.String }, new { type = "department", value = "B", value_type = ClaimValueTypes.String }, new { type = "level", value = "7", value_type = ClaimValueTypes.Integer }, new { type = "email", value = "user@example.invalid", value_type = ClaimValueTypes.String }, new { type = "role", value = "read-only", value_type = ClaimValueTypes.String }, new { type = "role", value = "administrator", value_type = ClaimValueTypes.String }, new { type = "acr", value = "normal-high", value_type = ClaimValueTypes.String }, new { type = "access_token", value = "not-a-real-token", value_type = ClaimValueTypes.String }, new { type = "emergency_session_id", value = "untrusted", value_type = ClaimValueTypes.String } }
             }).AsObject();
             JsonObject header = new JsonObject { ["alg"] = "ES256", ["kid"] = "test-signing", ["typ"] = CredentialVerifier.TokenType };
             switch (mutation)
@@ -145,6 +147,7 @@ namespace WebAppNetCore.Emergency.Tests
                 case "critical": header["crit"] = new JsonArray("unknown"); break;
                 case "none": header["alg"] = "none"; break;
             }
+            if (OmitIssuerClaims) { payload["claims_snapshot"] = new JsonArray(); }
             if (AdditionalClaimValue != null) { payload["claims_snapshot"].AsArray().Add(JsonSerializer.SerializeToNode(new { type = "email", value = AdditionalClaimValue, value_type = ClaimValueTypes.String })); }
             string headerText = header.ToJsonString(), payloadText = payload.ToJsonString();
             if (mutation == "duplicate") payloadText = "{\"sub\":\"other\"," + payloadText.Substring(1);

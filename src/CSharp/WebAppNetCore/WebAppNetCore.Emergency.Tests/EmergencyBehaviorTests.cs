@@ -13,12 +13,15 @@ namespace WebAppNetCore.Emergency.Tests
     public class EmergencyBehaviorTests
     {
         [DataTestMethod]
-        [DataRow(false)]
-        [DataRow(true)]
-        public async Task Lifecycle_PrepareOfflineRestartAndAcceptance_EnforcesLocalState(bool elliptic)
+        [DataRow(false, false)]
+        [DataRow(true, false)]
+        [DataRow(false, true)]
+        [DataRow(true, true)]
+        public async Task Lifecycle_PrepareOfflineRestartAndAcceptance_EnforcesLocalState(bool elliptic, bool preserve)
         {
             // Arrange
             using var fixture = new ProtocolFixture(elliptic);
+            fixture.Options.PreserveNormalClaims = preserve;
             JsonElement active = await fixture.Active();
             string operatorId = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
             fixture.Service.Acceptance(operatorId, true, 60);
@@ -32,6 +35,11 @@ namespace WebAppNetCore.Emergency.Tests
 
             // Assert
             Assert.IsNotNull(principal);
+            Assert.IsFalse(principal.IsInRole("case-admin"));
+            Assert.IsFalse(principal.Claims.Any(claim => claim.Value == "normal-evidence"));
+            Assert.AreEqual(preserve ? 2 : 0, principal.FindAll("department").Count());
+            Assert.AreEqual(preserve ? "Synthetic User" : "Prepared user", principal.Identity.Name);
+            if (preserve) Assert.AreEqual(System.Security.Claims.ClaimValueTypes.Integer, principal.FindFirst("level").ValueType);
             Assert.AreEqual(requests, fixture.Requests);
             Assert.AreEqual(1, principal.FindAll("emergency_session_id").Count());
             Assert.AreEqual(session.Id, principal.FindFirst("emergency_session_id").Value);

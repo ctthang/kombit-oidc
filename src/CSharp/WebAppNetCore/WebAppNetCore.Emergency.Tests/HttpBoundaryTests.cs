@@ -10,6 +10,9 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -24,7 +27,7 @@ namespace WebAppNetCore.Emergency.Tests
     [TestClass]
     public class HttpBoundaryTests
     {
-        internal static TestServer Host(ProtocolFixture fixture, bool enabled)
+        internal static TestServer Host(ProtocolFixture fixture, bool enabled, bool normalLogin = false)
         {
             fixture.Service.Dispose(); fixture.Options.Enabled = enabled;
             var configuration = new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { EmergencyCredential = fixture.Options })))).Build();
@@ -33,12 +36,32 @@ namespace WebAppNetCore.Emergency.Tests
             {
                 services.AddSingleton<IConfiguration>(configuration);
                 services.AddMvc(options => options.EnableEndpointRouting = false).AddApplicationPart(typeof(EmergencyController).Assembly);
-                services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
+                var authentication = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
+                if (normalLogin)
+                {
+                    authentication.AddOpenIdConnect(options =>
+                    {
+                        options.ClientId = "normal-client";
+                        options.ResponseType = "code";
+                        options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                        options.Configuration = new OpenIdConnectConfiguration { Issuer = fixture.Options.NormalIssuer, AuthorizationEndpoint = fixture.Options.NormalIssuer + "/authorize" };
+                    });
+                }
                 services.AddEmergencyCredential(configuration);
             }).Configure(app =>
             {
                 app.ApplicationServices.GetRequiredService<EmergencyRuntime>();
-                app.UseAuthentication(); app.UseMiddleware<EmergencyMiddleware>(); app.UseMvc();
+                app.UseAuthentication(); app.UseMiddleware<EmergencyMiddleware>();
+                if (normalLogin)
+                {
+                    app.Map("/test-normal-login", branch => branch.Run(async context =>
+                    {
+                        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, "synthetic-user") }, CookieAuthenticationDefaults.AuthenticationScheme));
+                        await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                        context.Response.StatusCode = 204;
+                    }));
+                }
+                app.UseMvc();
             }));
         }
         [DataTestMethod]
@@ -66,6 +89,8 @@ namespace WebAppNetCore.Emergency.Tests
             string html = await page.Content.ReadAsStringAsync();
             string csrf = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
             Assert.IsFalse(string.IsNullOrEmpty(csrf));
+            StringAssert.Contains(html, "Identify endpoint results (PoC)");
+            Assert.AreEqual("[]", Encoding.UTF8.GetString(Convert.FromBase64String(page.Headers.GetValues("X-Emergency-Issuer-Calls").Single())));
             // Act and Assert
             var missing = await Post(client, fixture, "operator/signin", new { secret = fixture.OperatorSecret }, cookies, null);
             Assert.AreEqual(HttpStatusCode.Forbidden, missing.StatusCode);
@@ -80,6 +105,49 @@ namespace WebAppNetCore.Emergency.Tests
             var stopped = await Post(client, fixture, "operator/acceptance", new { enabled = false, minutes = 0 }, cookies, csrf);
             Assert.AreEqual(HttpStatusCode.NoContent, stopped.StatusCode);
             var unavailable = await client.GetAsync(fixture.Options.Origin + "/emergency/login"); Assert.AreEqual(HttpStatusCode.Forbidden, unavailable.StatusCode);
+        }
+        [TestMethod]
+        public async Task Prepare_NormalSession_RendersLoginNavigationWithoutFormSubmission()
+        {
+            // Arrange
+            using var fixture = new ProtocolFixture();
+            using var server = Host(fixture, true, normalLogin: true);
+            using var client = server.CreateClient();
+            var cookies = new Dictionary<string, string>();
+            using var signIn = await client.GetAsync(fixture.Options.Origin + "/test-normal-login");
+            SaveCookies(signIn, cookies);
+            using var request = new HttpRequestMessage(HttpMethod.Get, fixture.Options.Origin + "/emergency");
+            request.Headers.Add("Cookie", string.Join("; ", cookies.Select(cookie => cookie.Key + "=" + cookie.Value)));
+
+            // Act
+            using var response = await client.SendAsync(request);
+            string html = await response.Content.ReadAsStringAsync();
+
+            // Assert
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            Assert.IsTrue(Regex.IsMatch(html, "<a[^>]+id=\"normal-login\"[^>]+href=\"/emergency/normal-login\""));
+            Assert.IsFalse(Regex.IsMatch(html, "<form[^>]+action=\"/emergency/normal-login\""));
+            StringAssert.Contains(response.Headers.GetValues("Content-Security-Policy").Single(), "form-action 'self'");
+            Assert.AreEqual(0, fixture.Requests);
+        }
+
+        [TestMethod]
+        public async Task NormalLogin_GetNavigation_StartsOidcChallengeWithRestrictedFormPolicy()
+        {
+            // Arrange
+            using var fixture = new ProtocolFixture();
+            using var server = Host(fixture, true, normalLogin: true);
+            using var client = server.CreateClient();
+
+            // Act
+            using var response = await client.GetAsync(fixture.Options.Origin + "/emergency/normal-login");
+
+            // Assert
+            Assert.AreEqual(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.AreEqual(new Uri(fixture.Options.NormalIssuer + "/authorize").GetLeftPart(UriPartial.Path), response.Headers.Location.GetLeftPart(UriPartial.Path));
+            StringAssert.Contains(response.Headers.Location.Query, "client_id=normal-client");
+            StringAssert.Contains(response.Headers.GetValues("Content-Security-Policy").Single(), "form-action 'self'");
+            Assert.AreEqual(0, fixture.Requests);
         }
         private static async Task<HttpResponseMessage> Post(HttpClient client, ProtocolFixture fixture, string operation, object value, Dictionary<string, string> cookies, string csrf, string origin = null)
         {

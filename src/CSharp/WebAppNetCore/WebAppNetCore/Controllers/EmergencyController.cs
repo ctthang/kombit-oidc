@@ -22,6 +22,7 @@ namespace WebAppNetCore.Controllers
         public EmergencyController(EmergencyRuntime feature, IAntiforgery csrf) { runtime = feature; antiforgery = csrf; }
         public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
+            using var issuerTrace = new IssuerCallTrace();
             try
             {
                 if (!runtime.Options.Enabled) { throw new EmergencyFault(404, "not_found"); }
@@ -37,6 +38,7 @@ namespace WebAppNetCore.Controllers
                 if (result.Exception != null) { result.Result = Error(result.Exception); result.ExceptionHandled = true; }
             }
             catch (Exception exception) { context.Result = Error(exception); }
+            finally { Response.Headers["X-Emergency-Issuer-Calls"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(issuerTrace.Snapshot()))); }
         }
         private ObjectResult Error(Exception exception)
         {
@@ -96,7 +98,7 @@ namespace WebAppNetCore.Controllers
         }
         [HttpGet("ended")]
         public IActionResult Ended() => View("Page", new EmergencyPageModel { Mode = "ended", Accepting = runtime.Accepting });
-        [HttpPost("normal-login")]
+        [HttpGet("normal-login")]
         public IActionResult NormalLogin()
         {
             if (EmergencyMiddleware.IsEmergency(User)) { throw new EmergencyFault(403, "normal_login_required"); }
