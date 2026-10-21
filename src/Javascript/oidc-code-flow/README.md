@@ -6,6 +6,20 @@ The application is built using the [`oidc-client`](https://www.npmjs.com/package
 
 ---
 
+## Dependency installation and security
+
+Use a Node.js version satisfying Vite's requirement (`^20.19.0 || >=22.12.0`), then install the locked dependencies:
+
+```bash
+npm ci
+npm audit
+npm audit --omit=dev
+```
+
+The `oidc-client` dependency has a scoped override for `serialize-javascript` 7.1.1 to fix [GHSA-5c6j-r48x-rmvq](https://github.com/advisories/GHSA-5c6j-r48x-rmvq). The sample uses the prebuilt OIDC browser library, whose source does not import this serializer. The override preserves `oidc-client` 1.11.5 and the sample's custom authentication methods. Reassess the override when replacing or upgrading the OIDC client.
+
+Do not use `npm audit fix --force` for this finding: npm proposes downgrading `oidc-client` to 1.10.1. Use `--omit=dev` instead of the deprecated `--prod` audit option.
+
 ## Configuration  
 
 ### Client Configuration  

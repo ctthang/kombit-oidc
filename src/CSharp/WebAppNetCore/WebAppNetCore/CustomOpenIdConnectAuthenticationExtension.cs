@@ -58,6 +58,9 @@ namespace WebAppNetCore
             connectOptions.Authority = configuration.ClaimsIssuer();
             connectOptions.GetClaimsFromUserInfoEndpoint = true;
             connectOptions.UsePkce = true;
+            // Preserve direct GET/POST authorization and the sample's custom client authentication.
+            // PAR is enabled automatically by newer middleware when advertised by discovery.
+            connectOptions.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
 
             var responseMode = configuration.ResponseMode();
             if (string.IsNullOrEmpty(responseMode))

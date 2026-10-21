@@ -33,7 +33,7 @@
               <button @click="login(false, false)">Sign in</button>
             </div>
             <template v-if="user">
-              <h4>Welcome, {{ user.profile.name }}</h4>
+              <h4>Welcome, {{ user.profile.sub }}</h4>
               <button @click="login(false, false)">Re-Authenticate</button>
               <button @click="login(true, false)">Force Authentication</button>
               <button @click="login(false, true)">
