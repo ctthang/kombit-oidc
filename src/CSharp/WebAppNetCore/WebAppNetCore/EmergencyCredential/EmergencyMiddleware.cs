@@ -9,7 +9,10 @@ namespace WebAppNetCore.EmergencyCredential
     public sealed class EmergencyMiddleware
     {
         private readonly RequestDelegate next;
-        public EmergencyMiddleware(RequestDelegate pipeline) { next = pipeline; }
+        public EmergencyMiddleware(RequestDelegate pipeline)
+        {
+            next = pipeline;
+        }
         public async Task InvokeAsync(HttpContext context, EmergencyRuntime runtime)
         {
             bool featurePath = context.Request.Path.StartsWithSegments("/emergency");
@@ -20,19 +23,45 @@ namespace WebAppNetCore.EmergencyCredential
                 context.Response.Headers["X-Frame-Options"] = "DENY";
                 context.Response.Headers["Referrer-Policy"] = "same-origin";
                 context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
-                if (!runtime.Options.Enabled) { context.Response.StatusCode = 404; await context.Response.WriteAsJsonAsync(new { error = "not_found" }); return; }
+                if (!runtime.Options.Enabled)
+                {
+                    context.Response.StatusCode = 404;
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        error = "not_found"
+                    });
+                    return;
+                }
                 if (!context.Request.IsHttps || context.Request.Scheme + "://" + context.Request.Host != runtime.Options.Origin)
                 {
-                    context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { error = "https_origin_required" }); return;
+                    context.Response.StatusCode = 403;
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        error = "https_origin_required"
+                    });
+                    return;
                 }
             }
             AuthenticateResult emergency = await context.AuthenticateAsync(EmergencyExtensions.CookieScheme);
             if (emergency.Succeeded)
             {
                 ClaimsPrincipal principal = null;
-                try { if (runtime.Options.Enabled) { principal = runtime.Service.Session(emergency.Principal.FindFirst("emergency_session_id")?.Value, EmergencyBrowser.Read(context)); } } catch (Exception) { }
-                if (principal == null) { await context.SignOutAsync(EmergencyExtensions.CookieScheme); }
-                else if (context.User.Identity?.IsAuthenticated != true) { context.User = principal; }
+                try
+                {
+                    if (runtime.Options.Enabled)
+                    {
+                        principal = runtime.Service.Session(emergency.Principal.FindFirst("emergency_session_id")?.Value, EmergencyBrowser.Read(context));
+                    }
+                }
+                catch (Exception) { }
+                if (principal == null)
+                {
+                    await context.SignOutAsync(EmergencyExtensions.CookieScheme);
+                }
+                else if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    context.User = principal;
+                }
             }
             if (context.User.Identity?.IsAuthenticated != true && context.Request.Cookies.ContainsKey(".AspNetCore.EmergencyCookie") && !featurePath)
             {

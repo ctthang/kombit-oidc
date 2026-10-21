@@ -6,6 +6,9 @@ namespace WebAppNetCore.Emergency.Tests
     {
         public DateTimeOffset Value { get; set; } = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         public override DateTimeOffset GetUtcNow() => Value;
-        public void Advance(int seconds) { Value = Value.AddSeconds(seconds); }
+        public void Advance(int seconds)
+        {
+            Value = Value.AddSeconds(seconds);
+        }
     }
 }

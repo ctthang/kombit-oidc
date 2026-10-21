@@ -2,19 +2,19 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography.X509Certificates;
 
 namespace WebAppNetCore.Controllers
 {
@@ -37,14 +37,14 @@ namespace WebAppNetCore.Controllers
         public IActionResult SignIn([FromQuery] string loa, [FromQuery] string max_age, [FromQuery] bool forceLogin, [FromQuery] bool isPassive)
         {
             var properties = new AuthenticationProperties { RedirectUri = "/" };
-            if(!string.IsNullOrEmpty(loa))
+            if (!string.IsNullOrEmpty(loa))
                 properties.SetParameter("acr_values", loa);
             if (!string.IsNullOrEmpty(max_age))
                 properties.SetParameter("max_age", max_age);
 
             if (forceLogin)
                 properties.SetParameter("prompt", "login");
-            else if(isPassive)
+            else if (isPassive)
                 properties.SetParameter("prompt", "none");
 
             return Challenge(properties, OpenIdConnectDefaults.AuthenticationScheme);
@@ -87,7 +87,10 @@ namespace WebAppNetCore.Controllers
 
         public IActionResult ReauthenticationCallBack()
         {
-            if (EmergencyCredential.EmergencyMiddleware.IsEmergency(User)) { return StatusCode(403); }
+            if (EmergencyCredential.EmergencyMiddleware.IsEmergency(User))
+            {
+                return StatusCode(403);
+            }
             InitializeDataForRPFrame();
             ViewData["Action"] = "ReauthenticationCallBack";
             return View("RPIFrame");
@@ -95,7 +98,10 @@ namespace WebAppNetCore.Controllers
 
         public ActionResult RPIFrame()
         {
-            if (EmergencyCredential.EmergencyMiddleware.IsEmergency(User)) { return StatusCode(403); }
+            if (EmergencyCredential.EmergencyMiddleware.IsEmergency(User))
+            {
+                return StatusCode(403);
+            }
             InitializeDataForRPFrame();
             ViewData["Action"] = "RPIFrame";
 
@@ -159,7 +165,7 @@ namespace WebAppNetCore.Controllers
             // Read the token header to check if it's encrypted
             var token = tokenHandler.ReadJsonWebToken(logout_token);
             string decryptedTokenString = logout_token;
-            
+
             // Check if the token is encrypted (JWE)
             if (OpenIdConnectHelper.IdTokenEncryptedResponseAlgs.Contains(token.Alg) ||
                 OpenIdConnectHelper.IdTokenEncryptedResponseEnc.Contains(token.Enc))
@@ -167,18 +173,18 @@ namespace WebAppNetCore.Controllers
                 // Token is encrypted, decrypt it
                 var certPath = configuration.IdTokenDecryptionCertPath();
                 var certPassword = configuration.IdTokenDecryptionCertPassword();
-                
+
                 if (string.IsNullOrEmpty(certPath) || string.IsNullOrEmpty(certPassword))
                 {
                     return BadRequest("Decryption certificate is not configured.");
                 }
-                
+
                 var cert = new X509Certificate2(certPath, certPassword);
                 if (cert == null || !cert.HasPrivateKey)
                 {
                     return BadRequest("Decryption certificate does not have a private key.");
                 }
-                
+
                 var encryptionCredentials = new X509EncryptingCredentials(cert, token.Alg, token.Enc);
                 decryptedTokenString = OpenIdConnectHelper.DecryptToken(logout_token, encryptionCredentials);
             }

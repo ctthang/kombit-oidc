@@ -21,7 +21,10 @@ namespace WebAppNetCore.EmergencyCredential
                 try
                 {
                     EmergencyOptions.ExternalPath(options.StorageDirectory, environment.ContentRootPath);
-                    if (Directory.Exists(options.StorageDirectory)) { File.WriteAllText(Path.Combine(options.StorageDirectory, "support-disabled"), "1"); }
+                    if (Directory.Exists(options.StorageDirectory))
+                    {
+                        File.WriteAllText(Path.Combine(options.StorageDirectory, "support-disabled"), "1");
+                    }
                 }
                 catch (Exception) { log.LogWarning("Emergency disabled-state marker unavailable. Local recovery is required before enabling support."); }
             }
@@ -39,12 +42,43 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 lock (gate)
                 {
-                    if (!Options.Enabled || disposed) { throw new EmergencyFault(404, "not_found"); }
-                    try { return service.Value; } catch (EmergencyFault) { throw; } catch (Exception) { throw new EmergencyFault(503, "emergency_unavailable"); }
+                    if (!Options.Enabled || disposed)
+                    {
+                        throw new EmergencyFault(404, "not_found");
+                    }
+                    try
+                    {
+                        return service.Value;
+                    }
+                    catch (EmergencyFault) { throw; }
+                    catch (Exception) { throw new EmergencyFault(503, "emergency_unavailable"); }
                 }
             }
         }
-        public bool Accepting { get { try { return Options.Enabled && Service.Accepting; } catch (Exception) { return false; } } }
-        public void Dispose() { lock (gate) { if (!disposed) { disposed = true; if (service.IsValueCreated) { service.Value.Dispose(); } } } }
+        public bool Accepting
+        {
+            get
+            {
+                try
+                {
+                    return Options.Enabled && Service.Accepting;
+                }
+                catch (Exception) { return false; }
+            }
+        }
+        public void Dispose()
+        {
+            lock (gate)
+            {
+                if (!disposed)
+                {
+                    disposed = true;
+                    if (service.IsValueCreated)
+                    {
+                        service.Value.Dispose();
+                    }
+                }
+            }
+        }
     }
 }

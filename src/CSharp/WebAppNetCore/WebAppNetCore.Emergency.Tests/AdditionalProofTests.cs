@@ -17,13 +17,18 @@ namespace WebAppNetCore.Emergency.Tests
     [TestClass]
     public class AdditionalProofTests
     {
-        [DataTestMethod][DataRow(false)][DataRow(true)]
+        [DataTestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
         public async Task Assertion_NonDiscoverableKeyWithoutUserHandle_Accepts(bool elliptic)
         {
             // Arrange
-            using var fixture = new ProtocolFixture(elliptic); string login = fixture.Login(); JsonElement issued = await fixture.Pending(login);
+            using var fixture = new ProtocolFixture(elliptic);
+            string login = fixture.Login();
+            JsonElement issued = await fixture.Pending(login);
             JsonElement challenge = JsonSerializer.SerializeToElement(fixture.Service.Challenge(fixture.Browser, issued.GetProperty("emergency_credential").GetString(), "activate", login));
-            JsonObject assertion = JsonNode.Parse(fixture.Assertion(challenge.GetProperty("publicKey"), 1).GetRawText()).AsObject(); assertion["response"]["userHandle"] = null;
+            JsonObject assertion = JsonNode.Parse(fixture.Assertion(challenge.GetProperty("publicKey"), 1).GetRawText()).AsObject();
+            assertion["response"]["userHandle"] = null;
             // Act
             await fixture.Service.FinishAsync(fixture.Browser, challenge.GetProperty("transaction_id").GetString(), "activate", JsonSerializer.SerializeToElement(assertion), login, CancellationToken.None);
             // Assert
@@ -33,8 +38,11 @@ namespace WebAppNetCore.Emergency.Tests
         public async Task Assertion_BothCountersZero_AcceptsFreshChallenges()
         {
             // Arrange
-            using var fixture = new ProtocolFixture(); string login = fixture.Login(); JsonElement issued = await fixture.Pending(login);
-            await fixture.Prove(issued, "activate", login, 0); fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
+            using var fixture = new ProtocolFixture();
+            string login = fixture.Login();
+            JsonElement issued = await fixture.Pending(login);
+            await fixture.Prove(issued, "activate", login, 0);
+            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
             // Act and Assert
             Assert.IsNotNull(await fixture.Prove(issued, "login", null, 0));
         }
@@ -42,7 +50,9 @@ namespace WebAppNetCore.Emergency.Tests
         public async Task Assertion_ReusedNonzeroCounter_Rejects()
         {
             // Arrange
-            using var fixture = new ProtocolFixture(); JsonElement issued = await fixture.Active(); fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
+            using var fixture = new ProtocolFixture();
+            JsonElement issued = await fixture.Active();
+            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
             // Act and Assert
             await Assert.ThrowsExactlyAsync<EmergencyFault>(() => fixture.Prove(issued, "login", null, 1));
         }
@@ -50,13 +60,17 @@ namespace WebAppNetCore.Emergency.Tests
         public async Task OidcEvents_InterleavedValidatedTickets_PublishOnlyAcceptedRequestReferences()
         {
             // Arrange
-            using var fixture = new ProtocolFixture(); JsonElement pending = await fixture.Pending(fixture.Login());
+            using var fixture = new ProtocolFixture();
+            JsonElement pending = await fixture.Pending(fixture.Login());
             using var host = HttpBoundaryTests.Host(fixture, true);
-            using var scopeA = host.Services.CreateScope(); using var scopeB = host.Services.CreateScope();
+            using var scopeA = host.Services.CreateScope();
+            using var scopeB = host.Services.CreateScope();
             TokenValidatedContext a = Context(scopeA.ServiceProvider, fixture, "test-user");
             TokenValidatedContext b = Context(scopeB.ServiceProvider, fixture, "another-user");
-            await EmergencyOidcEvents.StageAsync(a); await EmergencyOidcEvents.StageAsync(b);
-            Assert.IsFalse(a.Properties.Items.ContainsKey("emergency_login")); Assert.IsFalse(b.Properties.Items.ContainsKey("emergency_login"));
+            await EmergencyOidcEvents.StageAsync(a);
+            await EmergencyOidcEvents.StageAsync(b);
+            Assert.IsFalse(a.Properties.Items.ContainsKey("emergency_login"));
+            Assert.IsFalse(b.Properties.Items.ContainsKey("emergency_login"));
             // Act
             await EmergencyOidcEvents.AcceptedAsync(new TicketReceivedContext(b.HttpContext, b.Scheme, b.Options, new AuthenticationTicket(b.Principal, b.Properties, "Cookies")));
             await EmergencyOidcEvents.AcceptedAsync(new TicketReceivedContext(a.HttpContext, a.Scheme, a.Options, new AuthenticationTicket(a.Principal, a.Properties, "Cookies")));
@@ -68,7 +82,9 @@ namespace WebAppNetCore.Emergency.Tests
         }
         private static TokenValidatedContext Context(IServiceProvider services, ProtocolFixture fixture, string subject)
         {
-            var http = new DefaultHttpContext { RequestServices = services }; http.Request.Scheme = "https"; http.Request.Host = new HostString("oidc.fixture.invalid");
+            var http = new DefaultHttpContext { RequestServices = services };
+            http.Request.Scheme = "https";
+            http.Request.Host = new HostString("oidc.fixture.invalid");
             var principal = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, "userinfo-" + subject) }, "Cookies"));
             var scheme = new AuthenticationScheme("OpenIdConnect", "OpenIdConnect", typeof(OpenIdConnectHandler));
             var context = new TokenValidatedContext(http, scheme, new OpenIdConnectOptions(), principal, new AuthenticationProperties());

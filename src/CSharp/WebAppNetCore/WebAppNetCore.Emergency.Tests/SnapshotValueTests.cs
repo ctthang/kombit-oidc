@@ -6,7 +6,9 @@ namespace WebAppNetCore.Emergency.Tests
     [TestClass]
     public class SnapshotValueTests
     {
-        [DataTestMethod][DataRow("")][DataRow("first\nsecond")]
+        [DataTestMethod]
+        [DataRow("")]
+        [DataRow("first\nsecond")]
         public void Credential_ValidStringSnapshot_PreservesValue(string value)
         {
             // Arrange

@@ -26,21 +26,45 @@ namespace WebAppNetCore.EmergencyCredential
             string disabled = Path.Combine(options.StorageDirectory, "support-disabled");
             try
             {
-                string fingerprint = StrictJson.Hash(JsonSerializer.Serialize(new { options.Issuer, options.NormalIssuer, options.Audience, options.Origin, options.RelyingPartyId, options.EncryptionKeyId, encryption = verifier.KeyFingerprint() }));
+                string fingerprint = StrictJson.Hash(JsonSerializer.Serialize(new
+                {
+                    options.Issuer,
+                    options.NormalIssuer,
+                    options.Audience,
+                    options.Origin,
+                    options.RelyingPartyId,
+                    options.EncryptionKeyId,
+                    encryption = verifier.KeyFingerprint()
+                }));
                 if (File.Exists(path))
                 {
-                    if (new FileInfo(path).Length > 16777216) { throw new InvalidOperationException(); }
+                    if (new FileInfo(path).Length > 16777216)
+                    {
+                        throw new InvalidOperationException();
+                    }
                     state = JsonSerializer.Deserialize<LocalState>(protector.Unprotect(File.ReadAllBytes(path)));
-                    if (state == null || state.Version != 1 || state.ConfigurationHash != fingerprint || state.Bindings == null || state.Credentials == null || state.Sessions == null) { throw new InvalidOperationException(); }
+                    if (state == null || state.Version != 1 || state.ConfigurationHash != fingerprint || state.Bindings == null || state.Credentials == null || state.Sessions == null)
+                    {
+                        throw new InvalidOperationException();
+                    }
                     if (state.IssuerTrustRefreshRequired)
                     {
-                        if (state.SigningKeys != null || state.Acceptance || state.Sessions.Count != 0) { throw new InvalidOperationException(); }
+                        if (state.SigningKeys != null || state.Acceptance || state.Sessions.Count != 0)
+                        {
+                            throw new InvalidOperationException();
+                        }
                     }
-                    else { CredentialVerifier.ValidateKeys(state.SigningKeys); }
+                    else
+                    {
+                        CredentialVerifier.ValidateKeys(state.SigningKeys);
+                    }
                 }
                 else
                 {
-                    if (File.Exists(marker)) { throw new InvalidOperationException(); }
+                    if (File.Exists(marker))
+                    {
+                        throw new InvalidOperationException();
+                    }
                     string keys = File.ReadAllText(options.TrustedSigningKeysFile);
                     CredentialVerifier.ValidateKeys(keys);
                     state = new LocalState { ConfigurationHash = fingerprint, SigningKeys = keys };
@@ -60,7 +84,11 @@ namespace WebAppNetCore.EmergencyCredential
         }
         public T Read<T>(Func<LocalState, T> read)
         {
-            lock (Gate) { RequireOpen(); return read(state); }
+            lock (Gate)
+            {
+                RequireOpen();
+                return read(state);
+            }
         }
         public T Update<T>(Func<LocalState, T> update)
         {
@@ -69,7 +97,11 @@ namespace WebAppNetCore.EmergencyCredential
                 RequireOpen();
                 LocalState next = JsonSerializer.Deserialize<LocalState>(JsonSerializer.SerializeToUtf8Bytes(state));
                 T result = update(next);
-                try { Persist(next); } catch { faulted = true; throw; }
+                try
+                {
+                    Persist(next);
+                }
+                catch { faulted = true; throw; }
                 state = next;
                 return result;
             }
@@ -77,7 +109,10 @@ namespace WebAppNetCore.EmergencyCredential
         private void Persist(LocalState next)
         {
             byte[] bytes = protector.Protect(JsonSerializer.SerializeToUtf8Bytes(next));
-            if (bytes.Length > 16777216) { throw new EmergencyFault(503, "state_capacity"); }
+            if (bytes.Length > 16777216)
+            {
+                throw new EmergencyFault(503, "state_capacity");
+            }
             string temporary = path + "." + StrictJson.Id() + ".tmp";
             try
             {
@@ -86,12 +121,38 @@ namespace WebAppNetCore.EmergencyCredential
                     file.Write(bytes, 0, bytes.Length);
                     file.Flush(true);
                 }
-                if (File.Exists(path)) { File.Replace(temporary, path, null); }
-                else { File.Move(temporary, path); }
+                if (File.Exists(path))
+                {
+                    File.Replace(temporary, path, null);
+                }
+                else
+                {
+                    File.Move(temporary, path);
+                }
             }
             finally { if (File.Exists(temporary)) { File.Delete(temporary); } }
         }
-        private void RequireOpen() { if (disposed) { throw new ObjectDisposedException(nameof(ProtectedStateStore)); } if (faulted) { throw new EmergencyFault(503, "state_unavailable"); } }
-        public void Dispose() { lock (Gate) { if (!disposed) { disposed = true; ownership.Dispose(); } } }
+        private void RequireOpen()
+        {
+            if (disposed)
+            {
+                throw new ObjectDisposedException(nameof(ProtectedStateStore));
+            }
+            if (faulted)
+            {
+                throw new EmergencyFault(503, "state_unavailable");
+            }
+        }
+        public void Dispose()
+        {
+            lock (Gate)
+            {
+                if (!disposed)
+                {
+                    disposed = true;
+                    ownership.Dispose();
+                }
+            }
+        }
     }
 }

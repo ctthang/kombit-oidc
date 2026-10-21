@@ -1,20 +1,20 @@
-﻿using Microsoft.AspNetCore.Authentication.Cookies;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.IdentityModel.JsonWebTokens;
-using System;
-using System.Threading.Tasks;
-using System.Security.Claims;
-using System.Linq;
-using System.Collections.Generic;
 using Microsoft.IdentityModel.Logging;
-using System.Net.Http.Headers;
-using System.Net.Http;
-using System.Text.Json;
-using System.Text;
-using System.Security.Cryptography.X509Certificates;
+using Microsoft.IdentityModel.Tokens;
 
 namespace WebAppNetCore
 {
@@ -239,7 +239,11 @@ namespace WebAppNetCore
                 {
                     Console.WriteLine("OnTokenValidated.");
                     string sessionState = context.HttpContext.Items["oidc_session_state"] as string;
-                    try { await EmergencyCredential.EmergencyOidcEvents.StageAsync(context); } catch (Exception) { }
+                    try
+                    {
+                        await EmergencyCredential.EmergencyOidcEvents.StageAsync(context);
+                    }
+                    catch (Exception) { }
                     if (!string.IsNullOrEmpty(sessionState))
                     {
                         ClaimsIdentity identity = context.Principal.Identity as ClaimsIdentity;

@@ -25,7 +25,12 @@ namespace WebAppNetCore.EmergencyCredential
         private readonly Dictionary<string, Queue<long>> rates = new Dictionary<string, Queue<long>>();
         public EmergencyService(EmergencyOptions configuration, ProtectedStateStore state, CredentialVerifier verifier, AssertionVerifier assertionVerifier, IssuerClient backend, TimeProvider time)
         {
-            options = configuration; store = state; credentials = verifier; assertions = assertionVerifier; issuer = backend; clock = time;
+            options = configuration;
+            store = state;
+            credentials = verifier;
+            assertions = assertionVerifier;
+            issuer = backend;
+            clock = time;
         }
         private long Now => clock.GetUtcNow().ToUnixTimeSeconds();
         public bool Accepting => store.Read(state => IsAccepting(state, Now));
@@ -34,13 +39,22 @@ namespace WebAppNetCore.EmergencyCredential
         public string Capture(string browser, string subject, string normalIssuer, string reference, long expires, IReadOnlyList<SnapshotClaim> normalClaims = null)
         {
             if (normalIssuer != options.NormalIssuer || string.IsNullOrEmpty(subject) || subject.Length > 1024
-                || string.IsNullOrEmpty(reference) || reference.Length > 1024 || expires <= Now) { throw new EmergencyFault(403, "normal_login_not_eligible"); }
+                || string.IsNullOrEmpty(reference) || reference.Length > 1024 || expires <= Now)
+            {
+                throw new EmergencyFault(403, "normal_login_not_eligible");
+            }
             var capturedClaims = normalClaims == null ? null : NormalAccessTokenSnapshot.Copy(normalClaims);
-            if (options.UseNormalAccessTokenClaims && capturedClaims == null) { throw new EmergencyFault(403, "normal_access_token_not_eligible"); }
+            if (options.UseNormalAccessTokenClaims && capturedClaims == null)
+            {
+                throw new EmergencyFault(403, "normal_access_token_not_eligible");
+            }
             lock (store.Gate)
             {
                 Cleanup();
-                if (logins.Count >= 2000) { throw new EmergencyFault(503, "login_capacity"); }
+                if (logins.Count >= 2000)
+                {
+                    throw new EmergencyFault(503, "login_capacity");
+                }
                 AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800, NormalAccessTokenClaims = capturedClaims };
                 logins.Add(login.Id, login);
                 return login.Id;
@@ -49,7 +63,10 @@ namespace WebAppNetCore.EmergencyCredential
 
         public bool HasLogin(string loginId, string browser)
         {
-            lock (store.Gate) { return loginId != null && logins.TryGetValue(loginId, out AcceptedLogin login) && login.Browser == browser && login.Expires > Now && !login.Used; }
+            lock (store.Gate)
+            {
+                return loginId != null && logins.TryGetValue(loginId, out AcceptedLogin login) && login.Browser == browser && login.Expires > Now && !login.Used;
+            }
         }
         private AcceptedLogin Login(string loginId, string browser, bool consume)
         {
@@ -57,26 +74,41 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 throw new EmergencyFault(409, "new_normal_login_required");
             }
-            if (consume) { login.Used = true; }
+            if (consume)
+            {
+                login.Used = true;
+            }
             return login;
         }
         private static object Reference(AcceptedLogin login) => new { protocol = "oidc", issuer = login.Issuer, token_reference = login.TokenReference };
 
         public async Task<JsonElement> EnrollAsync(string loginId, string browser, CancellationToken cancellation)
         {
-            lock (store.Gate) { Login(loginId, browser, false); }
+            lock (store.Gate)
+            {
+                Login(loginId, browser, false);
+            }
             await SynchronizeIssuerAsync(cancellation);
             AcceptedLogin login;
             lock (store.Gate)
             {
                 Cleanup();
-                if (enrollments.Count >= 1000) { throw new EmergencyFault(503, "enrollment_capacity"); }
+                if (enrollments.Count >= 1000)
+                {
+                    throw new EmergencyFault(503, "enrollment_capacity");
+                }
                 login = Login(loginId, browser, true);
             }
-            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/enrollments", new { normal_token_reference = Reference(login) }, cancellation);
+            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/enrollments", new
+            {
+                normal_token_reference = Reference(login)
+            }, cancellation);
             string id = StrictJson.Text(response, "enrollment_id", 128);
             JsonElement creation = response.GetProperty("publicKey");
-            if (StrictJson.Text(creation.GetProperty("rp"), "id") != options.RelyingPartyId) { throw new EmergencyFault(502, "issuer_response_rejected"); }
+            if (StrictJson.Text(creation.GetProperty("rp"), "id") != options.RelyingPartyId)
+            {
+                throw new EmergencyFault(502, "issuer_response_rejected");
+            }
             lock (store.Gate)
             {
                 enrollments.Add(id, new EnrollmentRelay { Id = id, Login = login, Expires = Math.Min(login.Expires, StrictJson.Integer(response, "expires_at")) });
@@ -90,12 +122,18 @@ namespace WebAppNetCore.EmergencyCredential
             lock (store.Gate)
             {
                 AcceptedLogin login = Login(loginId, browser, false);
-                if (!enrollments.TryGetValue(id, out enrollment) || enrollment.Expires <= Now || enrollment.Login.Id != login.Id) { throw new EmergencyFault(410, "enrollment_expired"); }
+                if (!enrollments.TryGetValue(id, out enrollment) || enrollment.Expires <= Now || enrollment.Login.Id != login.Id)
+                {
+                    throw new EmergencyFault(410, "enrollment_expired");
+                }
                 enrollments.Remove(id);
                 generation = store.Read(state => state.Generation);
             }
             string expectedId = StrictJson.Text(credential, "rawId", 2048);
-            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/enrollments/" + Uri.EscapeDataString(id) + "/complete", new { credential }, cancellation);
+            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/enrollments/" + Uri.EscapeDataString(id) + "/complete", new
+            {
+                credential
+            }, cancellation);
             return AddPending(response, enrollment.Login, null, expectedId, generation);
         }
         public async Task CancelAsync(string loginId, string browser, string id, CancellationToken cancellation)
@@ -103,14 +141,20 @@ namespace WebAppNetCore.EmergencyCredential
             lock (store.Gate)
             {
                 AcceptedLogin login = Login(loginId, browser, false);
-                if (!enrollments.TryGetValue(id, out EnrollmentRelay enrollment) || enrollment.Login.Id != login.Id) { throw new EmergencyFault(404, "enrollment_not_found"); }
+                if (!enrollments.TryGetValue(id, out EnrollmentRelay enrollment) || enrollment.Login.Id != login.Id)
+                {
+                    throw new EmergencyFault(404, "enrollment_not_found");
+                }
                 enrollments.Remove(id);
             }
             await issuer.SendAsync(HttpMethod.Delete, "emergency/enrollments/" + Uri.EscapeDataString(id), null, cancellation);
         }
         public async Task<JsonElement> RenewAsync(string loginId, string browser, string bindingId, CancellationToken cancellation)
         {
-            lock (store.Gate) { Login(loginId, browser, false); }
+            lock (store.Gate)
+            {
+                Login(loginId, browser, false);
+            }
             await SynchronizeIssuerAsync(cancellation);
             AcceptedLogin login;
             long generation;
@@ -121,7 +165,11 @@ namespace WebAppNetCore.EmergencyCredential
                 Login(loginId, browser, true);
                 generation = store.Read(state => state.Generation);
             }
-            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/renewals", new { normal_token_reference = Reference(login), binding_id = bindingId }, cancellation);
+            JsonElement response = await issuer.SendAsync(HttpMethod.Post, "emergency/renewals", new
+            {
+                normal_token_reference = Reference(login),
+                binding_id = bindingId
+            }, cancellation);
             return AddPending(response, login, bindingId, null, generation);
         }
         private JsonElement AddPending(JsonElement response, AcceptedLogin login, string expectedBinding, string expectedCredential, long generation)
@@ -138,8 +186,14 @@ namespace WebAppNetCore.EmergencyCredential
             }
             store.Update(state =>
             {
-                if (state.Generation != generation) { throw new EmergencyFault(409, "synchronization_changed"); }
-                if (state.Credentials.Count >= 10000 || state.BlockedSubjects.Contains(verified.Subject)) { throw new EmergencyFault(403, "local_policy_denied"); }
+                if (state.Generation != generation)
+                {
+                    throw new EmergencyFault(409, "synchronization_changed");
+                }
+                if (state.Credentials.Count >= 10000 || state.BlockedSubjects.Contains(verified.Subject))
+                {
+                    throw new EmergencyFault(403, "local_policy_denied");
+                }
                 if (state.Bindings.TryGetValue(bindingId, out LocalBinding existing))
                 {
                     if (existing.Subject != verified.Subject || existing.CredentialId != verified.CredentialId || existing.CoseKey != verified.CoseKey || existing.UserHandle != verified.UserHandle || existing.Blocked)
@@ -149,7 +203,10 @@ namespace WebAppNetCore.EmergencyCredential
                 }
                 else
                 {
-                    if (expectedBinding != null || state.Bindings.Count >= 10000 || state.Bindings.Values.Any(binding => binding.CredentialId == verified.CredentialId)) { throw new EmergencyFault(409, "binding_conflict"); }
+                    if (expectedBinding != null || state.Bindings.Count >= 10000 || state.Bindings.Values.Any(binding => binding.CredentialId == verified.CredentialId))
+                    {
+                        throw new EmergencyFault(409, "binding_conflict");
+                    }
                     state.Bindings.Add(bindingId, new LocalBinding { Id = bindingId, Subject = verified.Subject, CredentialId = verified.CredentialId, UserHandle = verified.UserHandle, CoseKey = verified.CoseKey, Counter = verified.Counter });
                 }
                 state.Credentials.Add(verified.Id, new RegistryEntry { BindingId = bindingId, Credential = verified, NormalAccessTokenClaims = login.NormalAccessTokenClaims == null ? null : NormalAccessTokenSnapshot.Copy(login.NormalAccessTokenClaims) });
@@ -165,26 +222,53 @@ namespace WebAppNetCore.EmergencyCredential
             lock (store.Gate)
             {
                 Cleanup();
-                if (challenges.Count >= 1000) { throw new EmergencyFault(503, "challenge_capacity"); }
+                if (challenges.Count >= 1000)
+                {
+                    throw new EmergencyFault(503, "challenge_capacity");
+                }
                 return store.Read(state =>
                 {
                     RegistryEntry entry = Entry(state, credential.Id, purpose == "login" ? "active" : "pending");
-                    if (entry.Credential.Digest != credential.Digest) { throw new EmergencyFault(403, "credential_not_registered"); }
+                    if (entry.Credential.Digest != credential.Digest)
+                    {
+                        throw new EmergencyFault(403, "credential_not_registered");
+                    }
                     if (purpose == "activate")
                     {
-                        if (Login(loginId, browser, false).Subject != credential.Subject) { throw new EmergencyFault(403, "account_mismatch"); }
+                        if (Login(loginId, browser, false).Subject != credential.Subject)
+                        {
+                            throw new EmergencyFault(403, "account_mismatch");
+                        }
                     }
-                    else if (purpose != "login" || !IsAccepting(state, Now)) { throw new EmergencyFault(403, "acceptance_off"); }
+                    else if (purpose != "login" || !IsAccepting(state, Now))
+                    {
+                        throw new EmergencyFault(403, "acceptance_off");
+                    }
                     LocalBinding binding = state.Bindings[entry.BindingId];
                     PossessionTransaction transaction = new PossessionTransaction
                     {
-                        Id = StrictJson.Id(), Purpose = purpose, Browser = browser, CredentialId = credential.Id, Digest = credential.Digest,
-                        BindingId = entry.BindingId, Revision = binding.Revision, Generation = state.Generation, Counter = binding.Counter,
-                        Expires = Math.Min(Now + 120, credential.Expires), CoseKey = binding.CoseKey, UserHandle = binding.UserHandle,
-                        AuthenticatorId = binding.CredentialId, Options = assertions.Options(binding.CredentialId)
+                        Id = StrictJson.Id(),
+                        Purpose = purpose,
+                        Browser = browser,
+                        CredentialId = credential.Id,
+                        Digest = credential.Digest,
+                        BindingId = entry.BindingId,
+                        Revision = binding.Revision,
+                        Generation = state.Generation,
+                        Counter = binding.Counter,
+                        Expires = Math.Min(Now + 120, credential.Expires),
+                        CoseKey = binding.CoseKey,
+                        UserHandle = binding.UserHandle,
+                        AuthenticatorId = binding.CredentialId,
+                        Options = assertions.Options(binding.CredentialId)
                     };
                     challenges.Add(transaction.Id, transaction);
-                    return new { transaction_id = transaction.Id, publicKey = transaction.Options, expires_at = transaction.Expires };
+                    return new
+                    {
+                        transaction_id = transaction.Id,
+                        publicKey = transaction.Options,
+                        expires_at = transaction.Expires
+                    };
                 });
             }
         }
@@ -193,9 +277,15 @@ namespace WebAppNetCore.EmergencyCredential
             PossessionTransaction transaction;
             lock (store.Gate)
             {
-                if (!challenges.TryGetValue(id, out transaction) || transaction.Browser != browser || transaction.Purpose != purpose) { throw new EmergencyFault(410, "challenge_unavailable"); }
+                if (!challenges.TryGetValue(id, out transaction) || transaction.Browser != browser || transaction.Purpose != purpose)
+                {
+                    throw new EmergencyFault(410, "challenge_unavailable");
+                }
                 challenges.Remove(id);
-                if (transaction.Expires <= Now) { throw new EmergencyFault(410, "challenge_expired"); }
+                if (transaction.Expires <= Now)
+                {
+                    throw new EmergencyFault(410, "challenge_expired");
+                }
             }
             uint counter = await assertions.VerifyAsync(credential, transaction, cancellation);
             lock (store.Gate)
@@ -205,23 +295,46 @@ namespace WebAppNetCore.EmergencyCredential
                     RegistryEntry entry = Entry(state, transaction.CredentialId, purpose == "login" ? "active" : "pending");
                     LocalBinding binding = state.Bindings[entry.BindingId];
                     if (transaction.Expires <= Now || binding.Revision != transaction.Revision || binding.Counter != transaction.Counter
-                        || entry.Credential.Digest != transaction.Digest) { throw new EmergencyFault(409, "state_changed_retry"); }
+                        || entry.Credential.Digest != transaction.Digest)
+                    {
+                        throw new EmergencyFault(409, "state_changed_retry");
+                    }
                     if (purpose == "activate")
                     {
-                        if (Login(loginId, browser, false).Subject != entry.Credential.Subject || entry.Credential.Issued <= binding.LatestActivated) { throw new EmergencyFault(409, "replacement_superseded"); }
-                        foreach (RegistryEntry old in state.Credentials.Values.Where(item => item.BindingId == entry.BindingId && item.Status == "active")) { old.Status = "replaced"; }
+                        if (Login(loginId, browser, false).Subject != entry.Credential.Subject || entry.Credential.Issued <= binding.LatestActivated)
+                        {
+                            throw new EmergencyFault(409, "replacement_superseded");
+                        }
+                        foreach (RegistryEntry old in state.Credentials.Values.Where(item => item.BindingId == entry.BindingId && item.Status == "active"))
+                        {
+                            old.Status = "replaced";
+                        }
                         entry.Status = "active";
                         binding.LatestActivated = entry.Credential.Issued;
-                        binding.Counter = counter; binding.Revision++;
+                        binding.Counter = counter;
+                        binding.Revision++;
                         Audit(state, "credential_activated");
                         return null;
                     }
-                    if (!IsAccepting(state, Now) || state.Generation != transaction.Generation) { throw new EmergencyFault(403, "acceptance_changed"); }
-                    foreach (string expired in state.Sessions.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray()) { state.Sessions.Remove(expired); }
-                    if (state.Sessions.Count >= 2000) { throw new EmergencyFault(503, "session_capacity"); }
-                    binding.Counter = counter; binding.Revision++;
+                    if (!IsAccepting(state, Now) || state.Generation != transaction.Generation)
+                    {
+                        throw new EmergencyFault(403, "acceptance_changed");
+                    }
+                    foreach (string expired in state.Sessions.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray())
+                    {
+                        state.Sessions.Remove(expired);
+                    }
+                    if (state.Sessions.Count >= 2000)
+                    {
+                        throw new EmergencyFault(503, "session_capacity");
+                    }
+                    binding.Counter = counter;
+                    binding.Revision++;
                     LocalSession session = new LocalSession { Id = StrictJson.Id(), CredentialId = entry.Credential.Id, Browser = browser, Generation = state.Generation, Expires = Math.Min(Now + options.SessionMinutes * 60, entry.Credential.Expires) };
-                    if (state.AcceptanceUntil != 0) { session.Expires = Math.Min(session.Expires, state.AcceptanceUntil); }
+                    if (state.AcceptanceUntil != 0)
+                    {
+                        session.Expires = Math.Min(session.Expires, state.AcceptanceUntil);
+                    }
                     state.Sessions.Add(session.Id, session);
                     Audit(state, "session_created");
                     return session;
@@ -236,38 +349,70 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 throw new EmergencyFault(403, "credential_unavailable");
             }
-            if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null) { throw new EmergencyFault(409, "credential_renewal_required"); }
+            if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null)
+            {
+                throw new EmergencyFault(409, "credential_renewal_required");
+            }
             return entry;
         }
         private static LocalBinding OwnedBinding(LocalState state, string id, string subject)
         {
-            if (!state.Bindings.TryGetValue(id, out LocalBinding binding) || binding.Subject != subject) { throw new EmergencyFault(404, "binding_not_found"); }
-            if (binding.Blocked || state.BlockedSubjects.Contains(subject)) { throw new EmergencyFault(403, "binding_blocked"); }
+            if (!state.Bindings.TryGetValue(id, out LocalBinding binding) || binding.Subject != subject)
+            {
+                throw new EmergencyFault(404, "binding_not_found");
+            }
+            if (binding.Blocked || state.BlockedSubjects.Contains(subject))
+            {
+                throw new EmergencyFault(403, "binding_blocked");
+            }
             return binding;
         }
         public ClaimsPrincipal Session(string id, string browser)
         {
-            if (id == null) { return null; }
+            if (id == null)
+            {
+                return null;
+            }
             return store.Read(state =>
             {
-                if (!state.Sessions.TryGetValue(id, out LocalSession session) || session.Browser != browser || session.Expires <= Now || session.Generation != state.Generation || !IsAccepting(state, Now)) { return null; }
+                if (!state.Sessions.TryGetValue(id, out LocalSession session) || session.Browser != browser || session.Expires <= Now || session.Generation != state.Generation || !IsAccepting(state, Now))
+                {
+                    return null;
+                }
                 RegistryEntry entry;
-                try { entry = Entry(state, session.CredentialId, "active"); } catch (EmergencyFault) { return null; }
+                try
+                {
+                    entry = Entry(state, session.CredentialId, "active");
+                }
+                catch (EmergencyFault) { return null; }
                 ClaimsIdentity identity = new ClaimsIdentity(AuthenticationType, "emergency_display", "role");
                 identity.AddClaim(new Claim("emergency_display", "Prepared user"));
                 identity.AddClaim(new Claim("emergency_session_id", session.Id));
                 identity.AddClaim(new Claim("emergency_expires", session.Expires.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                 identity.AddClaim(new Claim("emergency", "true"));
                 identity.AddClaim(new Claim("local_assurance", "emergency-possession"));
-                if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null) { return null; }
+                if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null)
+                {
+                    return null;
+                }
                 foreach (SnapshotClaim claim in options.UseNormalAccessTokenClaims ? entry.NormalAccessTokenClaims : entry.Credential.Claims)
                 {
-                    if ((!options.PreserveNormalClaims && !options.AllowedClaimTypes.Contains(claim.Type, StringComparer.Ordinal)) || Reserved(claim.Type)) { continue; }
-                    if ((string.Equals(claim.Type, "role", StringComparison.OrdinalIgnoreCase) || string.Equals(claim.Type, ClaimTypes.Role, StringComparison.OrdinalIgnoreCase)) && !options.AllowedRoles.Contains(claim.Value, StringComparer.Ordinal)) { continue; }
+                    if ((!options.PreserveNormalClaims && !options.AllowedClaimTypes.Contains(claim.Type, StringComparer.Ordinal)) || Reserved(claim.Type))
+                    {
+                        continue;
+                    }
+                    if ((string.Equals(claim.Type, "role", StringComparison.OrdinalIgnoreCase) || string.Equals(claim.Type, ClaimTypes.Role, StringComparison.OrdinalIgnoreCase)) && !options.AllowedRoles.Contains(claim.Value, StringComparer.Ordinal))
+                    {
+                        continue;
+                    }
                     identity.AddClaim(new Claim(claim.Type, claim.Value, claim.ValueType));
                 }
                 string display = identity.FindFirst("name")?.Value ?? identity.FindFirst(ClaimTypes.Name)?.Value;
-                if (!string.IsNullOrWhiteSpace(display)) { identity.RemoveClaim(identity.FindFirst("emergency_display")); identity.AddClaim(new Claim("emergency_display", display)); }
+                if (!string.IsNullOrWhiteSpace(display))
+                {
+                    identity.RemoveClaim(identity.FindFirst("emergency_display"));
+                    identity.AddClaim(new Claim("emergency_display", display));
+                }
                 return new ClaimsPrincipal(identity);
             });
         }
@@ -280,7 +425,10 @@ namespace WebAppNetCore.EmergencyCredential
         }
         public void SignOut(string id)
         {
-            if (id == null) { return; }
+            if (id == null)
+            {
+                return;
+            }
             store.Update(state => state.Sessions.Remove(id));
         }
         public object Status(string loginId, string browser)
@@ -293,8 +441,11 @@ namespace WebAppNetCore.EmergencyCredential
                     can_prepare = !login.Used && login.Expires > Now,
                     credentials = state.Credentials.Values.Where(entry => entry.Credential.Subject == login.Subject).Select(entry => new
                     {
-                        ec_id = entry.Credential.Id, binding_id = entry.BindingId, status = state.Bindings[entry.BindingId].Blocked ? "blocked" : entry.Credential.Expires <= Now ? "expired" : entry.Status,
-                        expires_at = entry.Credential.Expires, renew_soon = entry.Credential.Expires < Now + 3 * 86400
+                        ec_id = entry.Credential.Id,
+                        binding_id = entry.BindingId,
+                        status = state.Bindings[entry.BindingId].Blocked ? "blocked" : entry.Credential.Expires <= Now ? "expired" : entry.Status,
+                        expires_at = entry.Credential.Expires,
+                        renew_soon = entry.Credential.Expires < Now + 3 * 86400
                     }).ToArray()
                 });
             }
@@ -306,29 +457,77 @@ namespace WebAppNetCore.EmergencyCredential
                 AcceptedLogin login = Login(loginId, browser, false);
                 store.Update(state =>
                 {
-                    if (!state.Bindings.TryGetValue(bindingId, out LocalBinding binding) || binding.Subject != login.Subject) { throw new EmergencyFault(404, "binding_not_found"); }
-                    Block(state, bindingId); state.RemovalQueue.Add(bindingId); Audit(state, "key_removed"); return true;
+                    if (!state.Bindings.TryGetValue(bindingId, out LocalBinding binding) || binding.Subject != login.Subject)
+                    {
+                        throw new EmergencyFault(404, "binding_not_found");
+                    }
+                    Block(state, bindingId);
+                    state.RemovalQueue.Add(bindingId);
+                    Audit(state, "key_removed");
+                    return true;
                 });
             }
             // The local block is durable even when the backend is unavailable.
-            try { await ReportRemovalAsync(bindingId, cancellation); } catch (Exception exception) when (!(exception is OperationCanceledException)) { }
+            try
+            {
+                await ReportRemovalAsync(bindingId, cancellation);
+            }
+            catch (Exception exception) when (!(exception is OperationCanceledException)) { }
         }
         private static void Block(LocalState state, string id)
         {
-            if (state.Bindings.TryGetValue(id, out LocalBinding binding)) { binding.Blocked = true; binding.Revision++; }
-            foreach (RegistryEntry entry in state.Credentials.Values.Where(entry => entry.BindingId == id)) { entry.Status = "blocked"; }
-            foreach (string session in state.Sessions.Where(pair => state.Credentials[pair.Value.CredentialId].BindingId == id).Select(pair => pair.Key).ToArray()) { state.Sessions.Remove(session); }
+            if (state.Bindings.TryGetValue(id, out LocalBinding binding))
+            {
+                binding.Blocked = true;
+                binding.Revision++;
+            }
+            foreach (RegistryEntry entry in state.Credentials.Values.Where(entry => entry.BindingId == id))
+            {
+                entry.Status = "blocked";
+            }
+            foreach (string session in state.Sessions.Where(pair => state.Credentials[pair.Value.CredentialId].BindingId == id).Select(pair => pair.Key).ToArray())
+            {
+                state.Sessions.Remove(session);
+            }
         }
         public string OperatorSignIn(string secret)
         {
-            if (secret == null || secret.Length > 512 || !StrictJson.Same(secret, EmergencyOptions.Secret(options.OperatorKeyEnvironmentVariable))) { throw new EmergencyFault(401, "operator_not_authenticated"); }
-            lock (store.Gate) { Cleanup(); if (operators.Count >= 100) { throw new EmergencyFault(503, "operator_capacity"); } string id = StrictJson.Id(); operators.Add(id, Now + 900); return id; }
+            if (secret == null || secret.Length > 512 || !StrictJson.Same(secret, EmergencyOptions.Secret(options.OperatorKeyEnvironmentVariable)))
+            {
+                throw new EmergencyFault(401, "operator_not_authenticated");
+            }
+            lock (store.Gate)
+            {
+                Cleanup();
+                if (operators.Count >= 100)
+                {
+                    throw new EmergencyFault(503, "operator_capacity");
+                }
+                string id = StrictJson.Id();
+                operators.Add(id, Now + 900);
+                return id;
+            }
         }
         public void RequireOperator(string id)
         {
-            lock (store.Gate) { if (id == null || !operators.TryGetValue(id, out long expires) || expires <= Now) { throw new EmergencyFault(401, "operator_not_authenticated"); } }
+            lock (store.Gate)
+            {
+                if (id == null || !operators.TryGetValue(id, out long expires) || expires <= Now)
+                {
+                    throw new EmergencyFault(401, "operator_not_authenticated");
+                }
+            }
         }
-        public void OperatorSignOut(string id) { lock (store.Gate) { if (id != null) { operators.Remove(id); } } }
+        public void OperatorSignOut(string id)
+        {
+            lock (store.Gate)
+            {
+                if (id != null)
+                {
+                    operators.Remove(id);
+                }
+            }
+        }
         public object OperatorStatus(string id)
         {
             RequireOperator(id);
@@ -337,7 +536,10 @@ namespace WebAppNetCore.EmergencyCredential
         public void Acceptance(string operatorId, bool enabled, int minutes)
         {
             RequireOperator(operatorId);
-            if (minutes < 0 || minutes > 1440) { throw StrictJson.Bad(); }
+            if (minutes < 0 || minutes > 1440)
+            {
+                throw StrictJson.Bad();
+            }
             store.Update(state => { if (enabled && state.IssuerTrustRefreshRequired) { throw new EmergencyFault(503, "issuer_trust_refresh_required"); } state.Acceptance = enabled; state.Generation++; state.AcceptanceUntil = enabled && minutes != 0 ? Now + minutes * 60 : 0; state.Sessions.Clear(); Audit(state, enabled ? "acceptance_on" : "acceptance_off"); return true; });
         }
         public void OperatorBlock(string operatorId, string bindingId, bool wholeAccount)
@@ -345,14 +547,24 @@ namespace WebAppNetCore.EmergencyCredential
             RequireOperator(operatorId);
             store.Update(state =>
             {
-                if (!state.Bindings.TryGetValue(bindingId, out LocalBinding binding)) { throw new EmergencyFault(404, "binding_not_found"); }
+                if (!state.Bindings.TryGetValue(bindingId, out LocalBinding binding))
+                {
+                    throw new EmergencyFault(404, "binding_not_found");
+                }
                 if (wholeAccount)
                 {
                     state.BlockedSubjects.Add(binding.Subject);
-                    foreach (string id in state.Bindings.Values.Where(item => item.Subject == binding.Subject).Select(item => item.Id).ToArray()) { Block(state, id); }
+                    foreach (string id in state.Bindings.Values.Where(item => item.Subject == binding.Subject).Select(item => item.Id).ToArray())
+                    {
+                        Block(state, id);
+                    }
                 }
-                else { Block(state, bindingId); }
-                Audit(state, wholeAccount ? "account_blocked" : "key_blocked"); return true;
+                else
+                {
+                    Block(state, bindingId);
+                }
+                Audit(state, wholeAccount ? "account_blocked" : "key_blocked");
+                return true;
             });
         }
         public async Task SynchronizeAsync(string operatorId, CancellationToken cancellation)
@@ -366,7 +578,10 @@ namespace WebAppNetCore.EmergencyCredential
         private async Task SynchronizeIssuerAsync(CancellationToken cancellation)
         {
             await issuerSynchronization.WaitAsync(cancellation);
-            try { await SynchronizeIssuerCoreAsync(cancellation); }
+            try
+            {
+                await SynchronizeIssuerCoreAsync(cancellation);
+            }
             finally { issuerSynchronization.Release(); }
         }
 
@@ -381,8 +596,14 @@ namespace WebAppNetCore.EmergencyCredential
                 long generation;
                 lock (store.Gate)
                 {
-                    if (store.Read(state => state.RevocationCursor != after || state.IssuerStateId != position.IssuerStateId)) { throw new EmergencyFault(409, "synchronization_changed"); }
-                    if (position.IssuerStateId != issuerStateId) { ResetIssuerState(issuerStateId); }
+                    if (store.Read(state => state.RevocationCursor != after || state.IssuerStateId != position.IssuerStateId))
+                    {
+                        throw new EmergencyFault(409, "synchronization_changed");
+                    }
+                    if (position.IssuerStateId != issuerStateId)
+                    {
+                        ResetIssuerState(issuerStateId);
+                    }
                     after = store.Read(state => state.RevocationCursor);
                     generation = store.Read(state => state.Generation);
                 }
@@ -393,37 +614,71 @@ namespace WebAppNetCore.EmergencyCredential
                 string confirmedStateId = StrictJson.Text(feed, "state_id", 128);
                 if (confirmedStateId != issuerStateId)
                 {
-                    lock (store.Gate) { ResetIssuerState(confirmedStateId); }
+                    lock (store.Gate)
+                    {
+                        ResetIssuerState(confirmedStateId);
+                    }
                     continue;
                 }
 
                 bool more = feed.GetProperty("has_more").GetBoolean();
                 store.Update(state =>
                 {
-                    if (state.RevocationCursor != after || state.IssuerStateId != issuerStateId || state.Generation != generation) { throw new EmergencyFault(409, "synchronization_changed"); }
+                    if (state.RevocationCursor != after || state.IssuerStateId != issuerStateId || state.Generation != generation)
+                    {
+                        throw new EmergencyFault(409, "synchronization_changed");
+                    }
                     long cursor = after;
                     JsonElement events = feed.GetProperty("events");
-                    if (events.GetArrayLength() > 100) { throw StrictJson.Bad(); }
+                    if (events.GetArrayLength() > 100)
+                    {
+                        throw StrictJson.Bad();
+                    }
                     foreach (JsonElement item in events.EnumerateArray())
                     {
                         long sequence = StrictJson.Integer(item, "sequence");
-                        if (sequence <= cursor) { throw new EmergencyFault(409, "revocation_order_invalid"); }
+                        if (sequence <= cursor)
+                        {
+                            throw new EmergencyFault(409, "revocation_order_invalid");
+                        }
                         string kind = StrictJson.Text(item, "kind"), target = StrictJson.Text(item, "id", 128);
-                        if (kind == "binding") { Block(state, target); }
-                        else if (kind == "ec") { if (state.Credentials.TryGetValue(target, out RegistryEntry entry)) { entry.Status = "blocked"; } }
-                        else { throw StrictJson.Bad(); }
+                        if (kind == "binding")
+                        {
+                            Block(state, target);
+                        }
+                        else if (kind == "ec")
+                        {
+                            if (state.Credentials.TryGetValue(target, out RegistryEntry entry))
+                            {
+                                entry.Status = "blocked";
+                            }
+                        }
+                        else
+                        {
+                            throw StrictJson.Bad();
+                        }
                         cursor = sequence;
                     }
-                    if (StrictJson.Integer(feed, "cursor") != cursor || (more && cursor == after)) { throw StrictJson.Bad(); }
+                    if (StrictJson.Integer(feed, "cursor") != cursor || (more && cursor == after))
+                    {
+                        throw StrictJson.Bad();
+                    }
                     state.RevocationCursor = cursor;
                     state.SigningKeys = keys.GetRawText();
                     state.IssuerTrustRefreshRequired = false;
-                    if (!more) { state.LastPoll = Now; Audit(state, "online_sync_completed"); }
+                    if (!more)
+                    {
+                        state.LastPoll = Now;
+                        Audit(state, "online_sync_completed");
+                    }
                     return true;
                 });
                 if (!more)
                 {
-                    foreach (string binding in store.Read(state => state.RemovalQueue.ToArray())) { await ReportRemovalAsync(binding, cancellation); }
+                    foreach (string binding in store.Read(state => state.RemovalQueue.ToArray()))
+                    {
+                        await ReportRemovalAsync(binding, cancellation);
+                    }
                     return;
                 }
             }
@@ -436,13 +691,23 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 bool hadState = state.IssuerStateId != null || state.Credentials.Count != 0 || state.Bindings.Count != 0
                     || state.RemovalQueue.Count != 0 || state.RevocationCursor != 0 || state.Acceptance;
-                foreach (string bindingId in state.Bindings.Keys.ToArray()) { Block(state, bindingId); }
-                foreach (RegistryEntry entry in state.Credentials.Values) { entry.Status = "blocked"; }
+                foreach (string bindingId in state.Bindings.Keys.ToArray())
+                {
+                    Block(state, bindingId);
+                }
+                foreach (RegistryEntry entry in state.Credentials.Values)
+                {
+                    entry.Status = "blocked";
+                }
                 state.Sessions.Clear();
                 state.RemovalQueue.Clear();
                 state.Acceptance = false;
                 state.AcceptanceUntil = 0;
-                if (hadState) { state.Generation++; Audit(state, "issuer_state_changed_new_preparation_required"); }
+                if (hadState)
+                {
+                    state.Generation++;
+                    Audit(state, "issuer_state_changed_new_preparation_required");
+                }
                 state.LastPoll = 0;
                 state.IssuerStateId = issuerStateId;
                 state.RevocationCursor = 0;
@@ -450,36 +715,82 @@ namespace WebAppNetCore.EmergencyCredential
                 state.IssuerTrustRefreshRequired = true;
                 return hadState;
             });
-            if (reset) { logins.Clear(); enrollments.Clear(); challenges.Clear(); }
+            if (reset)
+            {
+                logins.Clear();
+                enrollments.Clear();
+                challenges.Clear();
+            }
         }
         private async Task ReportRemovalAsync(string id, CancellationToken cancellation)
         {
-            await issuer.SendAsync(HttpMethod.Post, "emergency/revocations", new { binding_id = id }, cancellation);
+            await issuer.SendAsync(HttpMethod.Post, "emergency/revocations", new
+            {
+                binding_id = id
+            }, cancellation);
             store.Update(state => state.RemovalQueue.Remove(id));
         }
         public void Rate(string address)
         {
             lock (store.Gate)
             {
-                foreach (string key in rates.Keys.ToArray()) { while (rates[key].Count != 0 && rates[key].Peek() <= Now - 60) { rates[key].Dequeue(); } if (rates[key].Count == 0) { rates.Remove(key); } }
+                foreach (string key in rates.Keys.ToArray())
+                {
+                    while (rates[key].Count != 0 && rates[key].Peek() <= Now - 60)
+                    {
+                        rates[key].Dequeue();
+                    }
+                    if (rates[key].Count == 0)
+                    {
+                        rates.Remove(key);
+                    }
+                }
                 string id = StrictJson.Hash(address ?? "unknown");
-                if (!rates.TryGetValue(id, out Queue<long> attempts)) { if (rates.Count >= 4096) { throw new EmergencyFault(429, "rate_limited"); } rates.Add(id, attempts = new Queue<long>()); }
-                if (attempts.Count >= 60) { throw new EmergencyFault(429, "rate_limited"); }
+                if (!rates.TryGetValue(id, out Queue<long> attempts))
+                {
+                    if (rates.Count >= 4096)
+                    {
+                        throw new EmergencyFault(429, "rate_limited");
+                    }
+                    rates.Add(id, attempts = new Queue<long>());
+                }
+                if (attempts.Count >= 60)
+                {
+                    throw new EmergencyFault(429, "rate_limited");
+                }
                 attempts.Enqueue(Now);
             }
         }
         private void Cleanup()
         {
-            foreach (string id in logins.Where(pair => pair.Value.ForgetAfter <= Now).Select(pair => pair.Key).ToArray()) { logins.Remove(id); }
-            foreach (string id in enrollments.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray()) { enrollments.Remove(id); }
-            foreach (string id in challenges.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray()) { challenges.Remove(id); }
-            foreach (string id in operators.Where(pair => pair.Value <= Now).Select(pair => pair.Key).ToArray()) { operators.Remove(id); }
+            foreach (string id in logins.Where(pair => pair.Value.ForgetAfter <= Now).Select(pair => pair.Key).ToArray())
+            {
+                logins.Remove(id);
+            }
+            foreach (string id in enrollments.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray())
+            {
+                enrollments.Remove(id);
+            }
+            foreach (string id in challenges.Where(pair => pair.Value.Expires <= Now).Select(pair => pair.Key).ToArray())
+            {
+                challenges.Remove(id);
+            }
+            foreach (string id in operators.Where(pair => pair.Value <= Now).Select(pair => pair.Key).ToArray())
+            {
+                operators.Remove(id);
+            }
         }
         private void Audit(LocalState state, string code)
         {
             state.Audit.Add(Now.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + code);
-            if (state.Audit.Count > 200) { state.Audit.RemoveAt(0); }
+            if (state.Audit.Count > 200)
+            {
+                state.Audit.RemoveAt(0);
+            }
         }
-        public void Dispose() { store.Dispose(); }
+        public void Dispose()
+        {
+            store.Dispose();
+        }
     }
 }

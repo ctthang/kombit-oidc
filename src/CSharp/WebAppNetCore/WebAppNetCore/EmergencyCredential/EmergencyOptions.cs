@@ -28,7 +28,10 @@ namespace WebAppNetCore.EmergencyCredential
 
         public void Validate(string applicationRoot)
         {
-            if (!Enabled) { return; }
+            if (!Enabled)
+            {
+                return;
+            }
             if (!Uri.TryCreate(Origin, UriKind.Absolute, out Uri origin) || origin.Scheme != "https"
                 || Origin != origin.GetLeftPart(UriPartial.Authority) || origin.UserInfo.Length != 0
                 || origin.Host != RelyingPartyId || !Https(Issuer) || !Https(IssuerBaseUrl)
@@ -69,7 +72,10 @@ namespace WebAppNetCore.EmergencyCredential
             }
             string full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             string root = Path.GetFullPath(applicationRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) { throw new InvalidOperationException("Emergency storage must be outside the application."); }
+            if (full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Emergency storage must be outside the application.");
+            }
             for (DirectoryInfo directory = new DirectoryInfo(Path.GetFullPath(path)); directory != null; directory = directory.Parent)
             {
                 if (Directory.Exists(Path.Combine(directory.FullName, ".git")) || File.Exists(Path.Combine(directory.FullName, ".git")))

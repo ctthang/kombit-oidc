@@ -1,10 +1,10 @@
 ﻿using System;
-using WebAppNetCore.EmergencyCredential;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WebAppNetCore.EmergencyCredential;
 namespace WebAppNetCore
 {
     public class Startup
@@ -23,7 +23,8 @@ namespace WebAppNetCore
             {
                 options.EnableEndpointRouting = false;
             });
-            services.AddSession(options => {
+            services.AddSession(options =>
+            {
                 options.IdleTimeout = TimeSpan.FromMinutes(30);
             });
             services.ConfigureOpenIdServices(Configuration);
@@ -48,7 +49,7 @@ namespace WebAppNetCore
             app.UseStaticFiles();
             app.UseAuthentication();
             app.UseMiddleware<EmergencyMiddleware>();
-            
+
             // Add session validation middleware after authentication
             app.UseMiddleware<SessionValidationMiddleware>();
 

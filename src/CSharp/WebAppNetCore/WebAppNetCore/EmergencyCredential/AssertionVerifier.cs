@@ -29,22 +29,40 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 StrictJson.Members(credential, "id", "rawId", "type", "response", "clientExtensionResults", "authenticatorAttachment");
                 if (StrictJson.Text(credential, "type") != "public-key" || StrictJson.Text(credential, "id", 2048) != transaction.AuthenticatorId
-                    || StrictJson.Text(credential, "rawId", 2048) != transaction.AuthenticatorId) { throw StrictJson.Bad(); }
+                    || StrictJson.Text(credential, "rawId", 2048) != transaction.AuthenticatorId)
+                {
+                    throw StrictJson.Bad();
+                }
                 JsonElement response = credential.GetProperty("response");
                 StrictJson.Members(response, "authenticatorData", "clientDataJSON", "signature", "userHandle");
                 byte[] data = StrictJson.Bytes(StrictJson.Text(response, "authenticatorData", 16384));
-                if (data.Length < 37 || (data[32] & 5) != 5 || (data[32] & 24) != 0) { throw StrictJson.Bad(); }
+                if (data.Length < 37 || (data[32] & 5) != 5 || (data[32] & 24) != 0)
+                {
+                    throw StrictJson.Bad();
+                }
                 JsonElement client = StrictJson.Parse(new UTF8Encoding(false, true).GetString(StrictJson.Bytes(StrictJson.Text(response, "clientDataJSON", 16384))));
-                if (client.TryGetProperty("topOrigin", out _) || (client.TryGetProperty("crossOrigin", out JsonElement cross) && cross.ValueKind != JsonValueKind.False)) { throw StrictJson.Bad(); }
-                if (response.TryGetProperty("userHandle", out JsonElement user) && user.ValueKind != JsonValueKind.Null && user.GetString() != transaction.UserHandle) { throw StrictJson.Bad(); }
+                if (client.TryGetProperty("topOrigin", out _) || (client.TryGetProperty("crossOrigin", out JsonElement cross) && cross.ValueKind != JsonValueKind.False))
+                {
+                    throw StrictJson.Bad();
+                }
+                if (response.TryGetProperty("userHandle", out JsonElement user) && user.ValueKind != JsonValueKind.Null && user.GetString() != transaction.UserHandle)
+                {
+                    throw StrictJson.Bad();
+                }
                 AuthenticatorAssertionRawResponse raw = JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(credential.GetRawText());
                 await fido.MakeAssertionAsync(new MakeAssertionParams
                 {
-                    AssertionResponse = raw, OriginalOptions = transaction.Options, StoredPublicKey = StrictJson.Bytes(transaction.CoseKey), StoredSignatureCounter = transaction.Counter,
+                    AssertionResponse = raw,
+                    OriginalOptions = transaction.Options,
+                    StoredPublicKey = StrictJson.Bytes(transaction.CoseKey),
+                    StoredSignatureCounter = transaction.Counter,
                     IsUserHandleOwnerOfCredentialIdCallback = (p, token) => Task.FromResult(p.UserHandle.SequenceEqual(StrictJson.Bytes(transaction.UserHandle)) && p.CredentialId.SequenceEqual(StrictJson.Bytes(transaction.AuthenticatorId)))
                 }, cancellation);
                 uint counter = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(33, 4));
-                if ((counter != 0 || transaction.Counter != 0) && counter <= transaction.Counter) { throw StrictJson.Bad(); }
+                if ((counter != 0 || transaction.Counter != 0) && counter <= transaction.Counter)
+                {
+                    throw StrictJson.Bad();
+                }
                 return counter;
             }
             catch (OperationCanceledException) { throw; }

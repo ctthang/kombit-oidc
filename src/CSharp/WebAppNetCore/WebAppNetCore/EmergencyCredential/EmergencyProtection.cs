@@ -15,7 +15,10 @@ namespace WebAppNetCore.EmergencyCredential
         private sealed class DeferredProvider : IDataProtectionProvider
         {
             private readonly Lazy<IDataProtectionProvider> provider;
-            public DeferredProvider(Lazy<IDataProtectionProvider> value) { provider = value; }
+            public DeferredProvider(Lazy<IDataProtectionProvider> value)
+            {
+                provider = value;
+            }
             public IDataProtector CreateProtector(string purpose) => provider.Value.CreateProtector(purpose);
         }
     }
