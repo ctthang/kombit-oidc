@@ -4,7 +4,10 @@
     if (!root) return;
     const base = root.dataset.base;
     const csrf = root.querySelector('input[name="__RequestVerificationToken"]').value;
-    const message = text => { document.getElementById('message').textContent = text; };
+    const message = (text, tone = '') => { const status = document.getElementById('message'); status.textContent = text; status.dataset.tone = tone; };
+    const element = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text != null) node.textContent = text; return node; };
+    const badge = (status, text) => { const node = element('span', 'em-badge', text); node.dataset.status = status; return node; };
+    document.querySelectorAll('time[data-local]').forEach(time => { const date = new Date(time.getAttribute('datetime')); if (!isNaN(date)) time.textContent = date.toLocaleString(); });
     const decode = text => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - text.length % 4) % 4)), c => c.charCodeAt(0));
     const encode = buffer => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
@@ -16,7 +19,7 @@
         if (!list) return;
         list.replaceChildren();
         for (const text of callHistory.slice().reverse()) { const item = document.createElement('li'); item.textContent = text; list.append(item); }
-        if (!callHistory.length) { const item = document.createElement('li'); item.textContent = 'No calls recorded in this tab yet. Perform preparation, renewal, removal, or operator synchronization to see Identify results.'; list.append(item); }
+        if (!callHistory.length) { const item = document.createElement('li'); item.className = 'em-empty'; item.textContent = 'No calls recorded in this tab yet. Perform preparation, renewal, removal, or operator synchronization to see Identify results.'; list.append(item); }
     }
     function recordIssuerCalls(response) {
         try {
@@ -47,7 +50,7 @@
     }
     const safe = action => async event => {
         if (event) event.preventDefault();
-        try { message('Working…'); await action(); if (document.getElementById('message').textContent === 'Working…') message(''); } catch (error) { message(error.message === 'new_normal_login_required' ? 'Emergency preparation needs a fresh normal login. Use the Get a new normal login for preparation or renewal button, then try again.' : error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.'); }
+        try { message('Working…', 'busy'); await action(); if (document.getElementById('message').textContent === 'Working…') message(''); } catch (error) { message(error.message === 'new_normal_login_required' ? 'Emergency preparation needs a fresh normal login. Use the Get a new normal login for preparation or renewal button, then try again.' : error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.', 'error'); }
     };
     function bind(id, action, event = 'click') { const element = document.getElementById(id); if (element) element.addEventListener(event, safe(action)); }
     async function database() {
@@ -82,7 +85,7 @@
         const credential = await navigator.credentials.get({ publicKey: assertionOptions(challenge.publicKey) });
         const result = await api(prefix + '/complete', { transaction_id: challenge.transaction_id, credential: assertionResponse(credential) });
         if (login) { location.assign(result.redirect); return; }
-        message('Ready. This browser and key can be used while emergency acceptance is on.');
+        message('Ready. This browser and key can be used while emergency acceptance is on.', 'success');
         await list();
     }
     async function saveAndActivate(record) {
@@ -91,7 +94,7 @@
         await stored(true, record);
         const readBack = (await stored(false)).find(item => item.ec_id === record.ec_id);
         if (!readBack || readBack.emergency_credential !== record.emergency_credential) throw new Error('Storage read-back failed. Credential is not ready.');
-        message('Stored, pending possession. Check your key again to activate.');
+        message('Stored, pending possession. Check your key again to activate.', 'busy');
         await possession(readBack, false);
     }
     bind('prepare', async () => {
@@ -109,7 +112,8 @@
             if (enrollment) { try { await api('enrollments/' + encodeURIComponent(enrollment.enrollment_id) + '/cancel'); } catch (_) { } }
         }
     });
-    function button(text, action) { const button = document.createElement('button'); button.type = 'button'; button.textContent = text; button.addEventListener('click', safe(action)); return button; }
+    function button(text, action, className) { const button = element('button', className, text); button.type = 'button'; button.addEventListener('click', safe(action)); return button; }
+    const statusLabels = { active: 'Active', pending: 'Pending confirmation', blocked: 'Blocked', expired: 'Expired' };
     async function list() {
         const ul = document.getElementById('credentials');
         if (!ul) return;
@@ -119,32 +123,47 @@
         for (const record of records) {
             const entry = status && status.credentials.find(item => item.ec_id === record.ec_id);
             if (status && !entry) continue;
-            const row = document.createElement('li');
-            row.textContent = 'Key ' + record.binding_id.slice(-6) + ' — ' + (entry ? entry.status : 'stored; server checks on use') + ' — expires ' + new Date(record.expires_at * 1000).toLocaleString() + ' ';
+            const expired = record.expires_at * 1000 <= Date.now();
+            const row = element('li', 'em-credential');
+            const head = element('div', 'em-credential-head');
+            head.append(element('span', 'em-credential-name', 'Key …' + record.binding_id.slice(-6)));
+            if (entry) head.append(badge(entry.status, statusLabels[entry.status] || entry.status));
+            else head.append(expired ? badge('expired', 'Expired') : badge('stored', 'Stored in this browser'));
+            if (entry && entry.status === 'active' && entry.renew_soon) head.append(badge('renew', 'Renew soon'));
+            row.append(head, element('p', 'em-credential-meta', 'Expires ' + new Date(record.expires_at * 1000).toLocaleString() + (entry ? '' : ' · the server checks status on use')));
+            const actions = element('div', 'em-actions');
             if (root.dataset.mode === 'login') {
-                if (record.expires_at * 1000 > Date.now()) row.append(button('Log in with this key', () => possession(record, true)));
+                if (!expired) actions.append(button('Log in with this key', () => possession(record, true), 'em-primary'));
             } else {
-                if (entry.status === 'pending') row.append(button('Confirm stored credential', () => possession(record, false)));
-                if (entry.status === 'active' && status.can_prepare) row.append(button('Renew with this key', async () => saveAndActivate(await api('renewals', { binding_id: record.binding_id }))));
-                row.append(button('Remove key locally', async () => { await api('keys/' + encodeURIComponent(record.binding_id) + '/remove'); message('Key blocked locally. Any failed issuer report remains queued.'); await list(); }));
-                const binding = document.createElement('p'); binding.textContent = 'Binding ID: ' + record.binding_id; row.append(binding);
+                const binding = element('p', 'em-credential-meta', 'Binding ID ');
+                binding.append(element('code', null, record.binding_id));
+                row.append(binding);
+                if (entry.status === 'pending') actions.append(button('Confirm stored credential', () => possession(record, false), 'em-primary'));
+                if (entry.status === 'active' && status.can_prepare) actions.append(button('Renew with this key', async () => saveAndActivate(await api('renewals', { binding_id: record.binding_id }))));
+                actions.append(button('Remove key locally', async () => { await api('keys/' + encodeURIComponent(record.binding_id) + '/remove'); message('Key blocked locally. Any failed issuer report remains queued.', 'success'); await list(); }, 'em-danger'));
             }
+            if (actions.children.length) row.append(actions);
             ul.append(row);
         }
-        if (!ul.children.length) { const empty = document.createElement('li'); empty.textContent = status && status.can_prepare ? 'This browser has no stored emergency credential yet. Choose Prepare this browser to create one.' : root.dataset.mode === 'prepare' ? 'This browser has no matching stored credential. Get a new normal login to prepare it.' : 'This browser has no stored emergency credential. Prepare it during a normal login before an outage.'; ul.append(empty); }
+        if (!ul.children.length) { const empty = element('li', 'em-empty'); empty.textContent =status && status.can_prepare ? 'This browser has no stored emergency credential yet. Choose Prepare this browser to create one.' : root.dataset.mode === 'prepare' ? 'This browser has no matching stored credential. Get a new normal login to prepare it.' : 'This browser has no stored emergency credential. Prepare it during a normal login before an outage.'; ul.append(empty); }
     }
     async function operatorStatus() {
         const status = await api('operator/status');
         document.getElementById('operator-controls').hidden = false;
-        document.getElementById('operator-state').textContent = 'Acceptance: ' + (status.accepting ? 'on' : 'off') + '. Last successful sync: ' + (status.last_poll ? new Date(status.last_poll * 1000).toLocaleString() : 'never') + '. Queued removals: ' + status.queued_removals;
+        const stat = (label, value) => { const group = element('div'); const dd = element('dd'); dd.append(value); group.append(element('dt', null, label), dd); return group; };
+        document.getElementById('operator-state').replaceChildren(
+            stat('Emergency acceptance', status.accepting ? badge('on', 'On') : badge('off', 'Off')),
+            stat('Last successful sync', status.last_poll ? new Date(status.last_poll * 1000).toLocaleString() : 'Never'),
+            stat('Queued removals', String(status.queued_removals)));
         const audit = document.getElementById('audit'); audit.replaceChildren();
-        status.audit.slice().reverse().forEach(text => { const item = document.createElement('li'); item.textContent = text; audit.append(item); });
+        status.audit.slice().reverse().forEach(text => audit.append(element('li', null, text)));
+        if (!status.audit.length) audit.append(element('li', 'em-empty', 'No local events recorded yet.'));
     }
     bind('operator-signin', async () => { const input = document.getElementById('operator-secret'); const secret = input.value; input.value = ''; await api('operator/signin', { secret }); location.reload(); }, 'submit');
     bind('accept-on', async () => { await api('operator/acceptance', { enabled: true, minutes: Number(document.getElementById('minutes').value) }); location.reload(); });
     bind('accept-off', async () => { await api('operator/acceptance', { enabled: false, minutes: 0 }); location.reload(); });
-    bind('block', async () => { await api('operator/block', { binding_id: document.getElementById('binding').value, whole_account: document.getElementById('whole-account').checked }); message('Blocked locally.'); await operatorStatus(); });
-    bind('poll', async () => { await api('operator/poll'); await operatorStatus(); message('Online synchronization completed.'); });
+    bind('block', async () => { await api('operator/block', { binding_id: document.getElementById('binding').value, whole_account: document.getElementById('whole-account').checked }); message('Blocked locally.', 'success'); await operatorStatus(); });
+    bind('poll', async () => { await api('operator/poll'); await operatorStatus(); message('Online synchronization completed.', 'success'); });
     bind('operator-signout', async () => { await api('operator/signout'); location.reload(); });
     bind('signout', async () => { const result = await api('signout'); location.assign(result.redirect); });
     if (root.dataset.mode === 'prepare' || (root.dataset.mode === 'login' && root.dataset.accepting === 'true')) safe(list)();
