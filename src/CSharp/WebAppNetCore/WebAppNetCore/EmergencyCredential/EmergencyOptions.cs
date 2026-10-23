@@ -19,10 +19,6 @@ namespace WebAppNetCore.EmergencyCredential
         public string EncryptionKeyId { get; set; } = "";
         public string TrustedSigningKeysFile { get; set; } = "";
         public string ApiKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_ISSUER_KEY";
-        public bool UseNormalAccessTokenClaims { get; set; }
-        public bool PreserveNormalClaims { get; set; }
-        public string[] AllowedClaimTypes { get; set; } = new[] { "email" };
-        public string[] AllowedRoles { get; set; } = Array.Empty<string>();
         public int SessionMinutes { get; set; } = 480;
 
         public void Validate(string applicationRoot)
@@ -36,7 +32,6 @@ namespace WebAppNetCore.EmergencyCredential
                 || origin.Host != RelyingPartyId || !Https(Issuer) || !Https(IssuerBaseUrl)
                 || !IssuerBaseUrl.EndsWith("/", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(NormalIssuer)
                 || string.IsNullOrWhiteSpace(Audience) || string.IsNullOrWhiteSpace(EncryptionKeyId)
-                || AllowedClaimTypes == null || AllowedRoles == null || AllowedClaimTypes.Length > 100
                 || SessionMinutes < 1 || SessionMinutes > 480)
             {
                 throw new InvalidOperationException("Invalid emergency configuration.");

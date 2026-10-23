@@ -33,17 +33,12 @@ namespace WebAppNetCore.EmergencyCredential
         }
         private long Now => clock.GetUtcNow().ToUnixTimeSeconds();
 
-        public string Capture(string browser, string subject, string normalIssuer, string reference, long expires, IReadOnlyList<SnapshotClaim> normalClaims = null)
+        public string Capture(string browser, string subject, string normalIssuer, string reference, long expires)
         {
             if (normalIssuer != options.NormalIssuer || string.IsNullOrEmpty(subject) || subject.Length > 1024
                 || string.IsNullOrEmpty(reference) || reference.Length > 1024 || expires <= Now)
             {
                 throw new EmergencyFault(403, "normal_login_not_eligible");
-            }
-            var capturedClaims = normalClaims == null ? null : NormalAccessTokenSnapshot.Copy(normalClaims);
-            if (options.UseNormalAccessTokenClaims && capturedClaims == null)
-            {
-                throw new EmergencyFault(403, "normal_access_token_not_eligible");
             }
             lock (store.Gate)
             {
@@ -52,7 +47,7 @@ namespace WebAppNetCore.EmergencyCredential
                 {
                     throw new EmergencyFault(503, "login_capacity");
                 }
-                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800, NormalAccessTokenClaims = capturedClaims };
+                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800 };
                 logins.Add(login.Id, login);
                 return login.Id;
             }
@@ -206,7 +201,7 @@ namespace WebAppNetCore.EmergencyCredential
                     }
                     state.Bindings.Add(bindingId, new LocalBinding { Id = bindingId, Subject = verified.Subject, CredentialId = verified.CredentialId, UserHandle = verified.UserHandle, CoseKey = verified.CoseKey, Counter = verified.Counter });
                 }
-                state.Credentials.Add(verified.Id, new RegistryEntry { BindingId = bindingId, Credential = verified, NormalAccessTokenClaims = login.NormalAccessTokenClaims == null ? null : NormalAccessTokenSnapshot.Copy(login.NormalAccessTokenClaims) });
+                state.Credentials.Add(verified.Id, new RegistryEntry { BindingId = bindingId, Credential = verified });
                 Audit(state, "credential_pending");
                 return true;
             });
@@ -338,10 +333,6 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 throw new EmergencyFault(403, "credential_unavailable");
             }
-            if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null)
-            {
-                throw new EmergencyFault(409, "credential_renewal_required");
-            }
             return entry;
         }
         private static LocalBinding OwnedBinding(LocalState state, string id, string subject)
@@ -380,17 +371,10 @@ namespace WebAppNetCore.EmergencyCredential
                 identity.AddClaim(new Claim("emergency_expires", session.Expires.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                 identity.AddClaim(new Claim("emergency", "true"));
                 identity.AddClaim(new Claim("local_assurance", "emergency-possession"));
-                if (options.UseNormalAccessTokenClaims && entry.NormalAccessTokenClaims == null)
+                // Every claim from the normal login's ID token is kept, except protocol, token and assurance claims.
+                foreach (SnapshotClaim claim in entry.Credential.Claims)
                 {
-                    return null;
-                }
-                foreach (SnapshotClaim claim in options.UseNormalAccessTokenClaims ? entry.NormalAccessTokenClaims : entry.Credential.Claims)
-                {
-                    if ((!options.PreserveNormalClaims && !options.AllowedClaimTypes.Contains(claim.Type, StringComparer.Ordinal)) || Reserved(claim.Type))
-                    {
-                        continue;
-                    }
-                    if ((string.Equals(claim.Type, "role", StringComparison.OrdinalIgnoreCase) || string.Equals(claim.Type, ClaimTypes.Role, StringComparison.OrdinalIgnoreCase)) && !options.AllowedRoles.Contains(claim.Value, StringComparer.Ordinal))
+                    if (Reserved(claim.Type))
                     {
                         continue;
                     }

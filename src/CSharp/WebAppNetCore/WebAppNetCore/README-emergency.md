@@ -60,6 +60,7 @@ Use Identify's `docs/features/US39805/issuer-settings.example.json` as the templ
 | `ApiKeyEnvironmentVariable` | `OIDC_EMERGENCY_ISSUER_KEY` in the Identify Runtime process |
 | `IssuanceEnabled` | `true` |
 | `AllowedClaimTypes` | The approved types present in the normal ID token |
+| `PreserveNormalClaims` | `true`, so every claim in the normal ID token is signed into the emergency credential |
 
 Remove unused example clients. Every listed client is validated, even if its issuance switch is false. Each client needs a distinct encryption key, audience, RP ID, and backend secret.
 
@@ -179,7 +180,7 @@ The current emergency suite passes 57 tests, including issuer-state changes, leg
 
 This is one process with bounded local state. Protection does not prevent a trusted host administrator from restoring old state. There is no trusted hardware-attestation policy, multi-node coordination, automated encryption-key rotation, or rollback-proof recovery. Issuer-state recovery blocks previous credentials and requires new preparation. Offline authorization can be stale. Browser data deletion loses preparation.
 
-Local claim/role allowlists reduce the signed snapshot. Normal assurance, tokens, session IDs, and reserved markers are excluded. The OIDC example grants no basic privilege XML. Existing normal-demo token diagnostics remain outside emergency behavior. Real normal SSO/logout, physical authenticators, other deployment combinations, and production dependency review still need evidence.
+Every claim from the normal ID token is kept, including all roles. Normal assurance, tokens, session IDs, and reserved markers are excluded. The OIDC example grants no basic privilege XML. Existing normal-demo token diagnostics remain outside emergency behavior. Real normal SSO/logout, physical authenticators, other deployment combinations, and production dependency review still need evidence.
 
 ## PoC: inspect Identify endpoint results
 
@@ -191,30 +192,10 @@ The panel keeps the latest 40 entries in this tab's session storage, including a
 
 Results contain no request/response bodies, API keys, token references, emergency credential values, enrollment IDs, binding IDs, subjects, or personal claims. HTTP statuses and fixed summaries are returned only on the originating request via the bounded `X-Emergency-Issuer-Calls` response header. This is a demonstration aid, not a durable audit log.
 
-## Preserve claims from normal login
+## Claims from normal login
 
-Set `PreserveNormalClaims: true` on the matching Identify issuer client and in the sample's emergency settings (the same JSON property on both sides). The example files enable it; omitted values retain the previous explicit claim-type allowlist behavior. Identify captures the claims it issued in the normal OIDC ID token or SAML assertion and signs them into the emergency credential. The browser never supplies a replacement claims list. The sample projects the verified credential's snapshot into its emergency principal, preserving claim types, values, value types, and repeated claims. It does not fetch current claims during offline login.
+The emergency session gets the claims from the normal login's ID token. Identify captures the claims it issued in the normal OIDC ID token and signs them into the emergency credential's `claims_snapshot`; set `PreserveNormalClaims: true` on the matching Identify issuer client so that all of them are included. The browser never supplies a claims list. The sample has no claim-type or role allowlist: it projects every snapshot claim into the emergency principal, preserving claim types, values, value types, and repeated claims. It does not fetch current claims during offline login.
 
-Token metadata, raw tokens, and emergency-reserved claims remain excluded. Clients continue to exclude normal assurance claims such as `acr`, `amr`, `auth_time`, and LoA claims. Role values still require the configured emergency role allowlist; SAML privileges and scopes still pass through the existing local restrictions. `emergency=true`, `local_assurance=emergency-possession`, and local session expiry remain authoritative. A permitted `name` or standard name claim replaces the generic Prepared user display. Original claim names are preserved rather than automatically applying OIDC inbound claim-name mapping.
+Token metadata, raw tokens, and emergency-reserved claims are still excluded, as are normal assurance claims such as `acr`, `amr`, `auth_time`, and LoA claims. `emergency=true`, `local_assurance=emergency-possession`, and local session expiry remain authoritative. A `name` or standard name claim replaces the generic Prepared user display. Original claim names are preserved rather than automatically applying OIDC inbound claim-name mapping.
 
-Deploy the updated issuer and sample, update the external settings, and restart their application pools. Then obtain a fresh normal login and renew or prepare the emergency credential. Existing credentials contain the old snapshot and cannot acquire claims retroactively. Missing attributes that were never present in the ID token/assertion cannot be invented by this option.
-
-
-## Client-side access-token snapshot (OIDC)
-
-Set these values in the deployed sample's `EmergencyCredential` configuration:
-
-```json
-"UseNormalAccessTokenClaims": true,
-"PreserveNormalClaims": true
-```
-
-The sample obtains the access token only from the server-side authorization-code redemption response. It validates its signature using the normal OIDC issuer's signing keys, expected issuer, expiration/not-before, supported asymmetric algorithm, and JWT type. Its `sub` must match the validated ID token and its `client_id` must match the configured OIDC client. If `azp` or the ID token's `at_hash` is present, those bindings must also match. Only after the OIDC handler accepts the complete login is the snapshot made eligible for preparation. UserInfo claims, browser-provided claims, refresh-token-only exchanges, and opaque/encrypted access tokens are not sources for this feature. Failure disables preparation for that login without breaking normal login.
-
-There is no audience allowlist in this mode: the token comes from the same backend code exchange and is bound to this client and user. The received `aud` is not used as its own expected value and is not used to authorize calls to an API. The emergency application continues to apply its local role/privilege restrictions. This behavior must not be reused as a general API access-token validator.
-
-The snapshot contains only bounded claim types/values/value types; token strings, token metadata, normal assurance claims, scopes, and token bindings are excluded. It is attached to the specific verified emergency credential only after issuer/subject/normal-login reference checks succeed, and saved in the application's existing protected state. It is separate from the issuer-signed `claims_snapshot`. Browser IndexedDB still stores only the issuer credential, so replacing browser data cannot replace the local claim snapshot. Local claims survive restart and offline login. Role changes after preparation are not reflected until renewal or key removal.
-
-Deploy only the updated OIDC sample and enable the two flags above. No new Identify OAuth2 change is required: it retains its original ID-token-based emergency issuance record. The previously deployed issuer endpoint feature remains required. SAML continues to use assertion claims and needs no deployment for this OIDC change.
-
-After enabling this mode, get a fresh normal login, renew the existing emergency credential, finish the possession check, and log in with the newest credential. Older credentials without a local snapshot require renewal. A legacy session does not acquire new claims automatically. `credential_renewal_required` means the selected credential predates the local snapshot; `normal_access_token_not_eligible` means the token could not be used for preparation. Keep user claims in the normal access token and request the scopes required for those claims.
+Claims are fixed when the credential is issued. Role or attribute changes after preparation are not reflected until renewal. Attributes that were never present in the ID token cannot be invented. Access-token and UserInfo claims are not used.

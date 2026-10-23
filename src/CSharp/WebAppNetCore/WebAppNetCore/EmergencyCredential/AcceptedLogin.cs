@@ -9,7 +9,6 @@ namespace WebAppNetCore.EmergencyCredential
         public string TokenReference { get; set; }
         public long Expires { get; set; }
         public long ForgetAfter { get; set; }
-        public System.Collections.Generic.List<SnapshotClaim> NormalAccessTokenClaims { get; set; }
         public bool Used { get; set; }
     }
 }

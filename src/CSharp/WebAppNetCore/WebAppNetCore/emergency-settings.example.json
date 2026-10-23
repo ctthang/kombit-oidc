@@ -13,10 +13,6 @@
     "EncryptionKeyId": "oidc-emergency-encryption",
     "TrustedSigningKeysFile": "C:\\ProgramData\\SafewhereSamples\\OidcEmergency\\issuer-signing-keys.json",
     "ApiKeyEnvironmentVariable": "OIDC_EMERGENCY_ISSUER_KEY",
-    "UseNormalAccessTokenClaims": true,
-      "PreserveNormalClaims": true,
-      "AllowedClaimTypes": ["email", "role"],
-    "AllowedRoles": ["read-only"],
     "SessionMinutes": 480
   }
 }

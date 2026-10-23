@@ -13,15 +13,12 @@ namespace WebAppNetCore.Emergency.Tests
     public class EmergencyBehaviorTests
     {
         [DataTestMethod]
-        [DataRow(false, false)]
-        [DataRow(true, false)]
-        [DataRow(false, true)]
-        [DataRow(true, true)]
-        public async Task Lifecycle_PrepareOfflineRestartAndLogin_EnforcesLocalState(bool elliptic, bool preserve)
+        [DataRow(false)]
+        [DataRow(true)]
+        public async Task Lifecycle_PrepareOfflineRestartAndLogin_EnforcesLocalState(bool elliptic)
         {
             // Arrange
             using var fixture = new ProtocolFixture(elliptic);
-            fixture.Options.PreserveNormalClaims = preserve;
             JsonElement active = await fixture.Active();
             int requests = fixture.Requests;
             fixture.Offline = true;
@@ -33,18 +30,18 @@ namespace WebAppNetCore.Emergency.Tests
 
             // Assert
             Assert.IsNotNull(principal);
-            Assert.IsFalse(principal.IsInRole("case-admin"));
+            Assert.IsTrue(principal.HasClaim("ROLE", "case-admin"));
             Assert.IsFalse(principal.Claims.Any(claim => claim.Value == "normal-evidence"));
-            Assert.AreEqual(preserve ? 2 : 0, principal.FindAll("department").Count());
-            Assert.AreEqual(preserve ? "Synthetic User" : "Prepared user", principal.Identity.Name);
-            if (preserve)
-                Assert.AreEqual(System.Security.Claims.ClaimValueTypes.Integer, principal.FindFirst("level").ValueType);
+            Assert.AreEqual(2, principal.FindAll("department").Count());
+            Assert.AreEqual("Synthetic User", principal.Identity.Name);
+            Assert.AreEqual("user@example.invalid", principal.FindFirst("email").Value);
+            Assert.AreEqual(System.Security.Claims.ClaimValueTypes.Integer, principal.FindFirst("level").ValueType);
             Assert.AreEqual(requests, fixture.Requests);
             Assert.AreEqual(1, principal.FindAll("emergency_session_id").Count());
             Assert.AreEqual(session.Id, principal.FindFirst("emergency_session_id").Value);
             Assert.IsNull(principal.FindFirst("acr"));
             Assert.IsNull(principal.FindFirst("access_token"));
-            CollectionAssert.AreEquivalent(new[] { "read-only" }, principal.FindAll("role").Select(claim => claim.Value).ToArray());
+            CollectionAssert.AreEquivalent(new[] { "case-admin", "read-only", "administrator" }, principal.FindAll("role").Select(claim => claim.Value).ToArray());
             Assert.IsNull(fixture.Service.Session(session.Id, "another-browser"));
             fixture.Service.SignOut(session.Id);
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));

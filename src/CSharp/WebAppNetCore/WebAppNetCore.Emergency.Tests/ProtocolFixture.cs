@@ -36,8 +36,6 @@ namespace WebAppNetCore.Emergency.Tests
         public Func<Task> BeforeSigningKeysResponse { get; set; }
         public string IssuerStateId { get; set; } = StrictJson.Id();
         public long RevocationSequenceOffset { get; set; }
-        public System.Collections.Generic.List<SnapshotClaim> NormalClaims { get; set; }
-        public bool OmitIssuerClaims { get; set; }
         public string AdditionalClaimValue { get; set; }
         public int Requests { get; private set; }
         private readonly RSA encryption = RSA.Create(2048);
@@ -72,9 +70,7 @@ namespace WebAppNetCore.Emergency.Tests
                 EncryptionPrivateKeyFile = Path.Combine(Root, "decryption.pem"),
                 EncryptionKeyId = "test-encryption",
                 TrustedSigningKeysFile = Path.Combine(Root, "trust.json"),
-                ApiKeyEnvironmentVariable = "TEST_ISSUER_" + unique,
-                AllowedClaimTypes = new[] { "email", "role", "acr", "access_token", "emergency_session_id" },
-                AllowedRoles = new[] { "read-only" }
+                ApiKeyEnvironmentVariable = "TEST_ISSUER_" + unique
             };
             Environment.SetEnvironmentVariable(Options.ApiKeyEnvironmentVariable, StrictJson.Id());
             File.WriteAllBytes(Options.EncryptionPrivateKeyFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(encryption.ExportRSAPrivateKeyPem()), SHA256.HashData(Encoding.UTF8.GetBytes("OidcSample.Emergency.EncryptionKey.v1|" + Options.Audience)), DataProtectionScope.LocalMachine));
@@ -105,7 +101,7 @@ namespace WebAppNetCore.Emergency.Tests
             Service?.Dispose();
             Service = new EmergencyService(Options, new ProtectedStateStore(Options, Protection, Verifier), Verifier, new AssertionVerifier(Options), new IssuerClient(Options, http), Clock);
         }
-        public string Login(string subject = "test-user") => Service.Capture(Browser, subject, Options.NormalIssuer, reference = StrictJson.Id(), Clock.Value.ToUnixTimeSeconds() + 600, NormalClaims);
+        public string Login(string subject = "test-user") => Service.Capture(Browser, subject, Options.NormalIssuer, reference = StrictJson.Id(), Clock.Value.ToUnixTimeSeconds() + 600);
         public async Task<JsonElement> Pending(string login)
         {
             JsonElement enrollment = await Service.EnrollAsync(login, Browser, CancellationToken.None);
@@ -258,10 +254,6 @@ namespace WebAppNetCore.Emergency.Tests
                 case "none":
                     header["alg"] = "none";
                     break;
-            }
-            if (OmitIssuerClaims)
-            {
-                payload["claims_snapshot"] = new JsonArray();
             }
             if (AdditionalClaimValue != null)
             {
