@@ -55,7 +55,7 @@ namespace WebAppNetCore.Controllers
                 }
             }
             catch (Exception exception) { context.Result = Error(exception); }
-            finally { Response.Headers["X-Emergency-Issuer-Calls"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(issuerTrace.Snapshot()))); }
+            finally { EmergencyDiagnostics.Write(HttpContext, "issuer_calls", issuerCalls: issuerTrace.Snapshot()); Response.Headers["X-Emergency-Issuer-Calls"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(issuerTrace.Snapshot()))); }
         }
         private ObjectResult Error(Exception exception)
         {
@@ -65,8 +65,10 @@ namespace WebAppNetCore.Controllers
             {
                 Response.Headers.RetryAfter = "60";
             }
+            EmergencyDiagnostics.Write(HttpContext, "action_failed", status, exception);
             return StatusCode(status, new
             {
+                reference_id = EmergencyDiagnostics.Reference(HttpContext),
                 error = fault?.Code ?? (status == 403 ? "csrf_rejected" : status == 400 ? "invalid_request" : "emergency_unavailable")
             });
         }
@@ -109,7 +111,8 @@ namespace WebAppNetCore.Controllers
         [HttpGet("")]
         public async Task<IActionResult> Prepare()
         {
-            string login = await Normal();
+            string login = null;
+            try { login = await Normal(); } catch (EmergencyFault fault) when (fault.Status == 401) { }
             return View("Page", new EmergencyPageModel { Mode = "prepare", CanPrepare = runtime.Service.HasLogin(login, EmergencyBrowser.Read(HttpContext)) });
         }
         [HttpGet("login")]

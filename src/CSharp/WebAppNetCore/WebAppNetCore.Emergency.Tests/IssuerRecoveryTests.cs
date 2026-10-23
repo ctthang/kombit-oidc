@@ -88,7 +88,8 @@ namespace WebAppNetCore.Emergency.Tests
             // Assert
             using var state = OpenStateAfterStopping(fixture);
             Assert.AreEqual(43L, state.Read(value => value.RevocationCursor));
-            Assert.IsTrue(state.Read(value => value.Bindings[fixture.Binding].Blocked));
+            Assert.IsFalse(state.Read(value => value.Bindings.ContainsKey(fixture.Binding)));
+            Assert.AreEqual(0, state.Read(value => value.Credentials.Count));
         }
 
         [TestMethod]

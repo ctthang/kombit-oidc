@@ -12,7 +12,7 @@
     "EncryptionPrivateKeyFile": "C:\\ProgramData\\SafewhereSamples\\OidcEmergency\\decryption-key.bin",
     "EncryptionKeyId": "oidc-emergency-encryption",
     "TrustedSigningKeysFile": "C:\\ProgramData\\SafewhereSamples\\OidcEmergency\\issuer-signing-keys.json",
-    "ApiKeyEnvironmentVariable": "OIDC_EMERGENCY_ISSUER_KEY",
+    "ApiKey": "oidc-poc-key",
     "SessionMinutes": 480
   }
 }

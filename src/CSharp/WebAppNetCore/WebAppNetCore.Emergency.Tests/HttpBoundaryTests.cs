@@ -105,6 +105,8 @@ namespace WebAppNetCore.Emergency.Tests
             // Act and Assert
             var missing = await Post(client, fixture, "signout", new { }, cookies, null);
             Assert.AreEqual(HttpStatusCode.Forbidden, missing.StatusCode);
+            using var failureJson = JsonDocument.Parse(await missing.Content.ReadAsStringAsync());
+            Assert.AreEqual(missing.Headers.GetValues("X-Emergency-Reference").Single(), failureJson.RootElement.GetProperty("reference_id").GetString());
             var crossOrigin = await Post(client, fixture, "signout", new { }, cookies, csrf, "https://wrong.invalid");
             Assert.AreEqual(HttpStatusCode.Forbidden, crossOrigin.StatusCode);
             var signedOut = await Post(client, fixture, "signout", new { }, cookies, csrf);

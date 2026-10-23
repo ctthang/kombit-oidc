@@ -51,7 +51,7 @@ namespace WebAppNetCore.EmergencyCredential
                         return service.Value;
                     }
                     catch (EmergencyFault) { throw; }
-                    catch (Exception) { throw new EmergencyFault(503, "emergency_unavailable"); }
+                    catch (Exception exception) { throw new EmergencyFault(503, "emergency_unavailable", exception); }
                 }
             }
         }

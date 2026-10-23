@@ -25,7 +25,7 @@ namespace WebAppNetCore.EmergencyCredential
             try
             {
                 using HttpRequestMessage request = new HttpRequestMessage(method, new Uri(new Uri(options.IssuerBaseUrl), relative));
-                request.Headers.Add("X-Emergency-Client-Key", EmergencyOptions.Secret(options.ApiKeyEnvironmentVariable));
+                request.Headers.Add("X-Emergency-Client-Key", options.BackendKey());
                 if (body != null)
                 {
                     request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");

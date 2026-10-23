@@ -41,18 +41,54 @@
     if (clearTrace) clearTrace.addEventListener('click', () => { callHistory = []; try { sessionStorage.removeItem(traceKey); } catch (_) { } renderIssuerCalls(); });
     renderIssuerCalls();
 
+
+    function setPreparationState(canPrepare) {
+        const login = document.getElementById('normal-login-step');
+        const prepare = document.getElementById('prepare-step');
+        const button = document.getElementById('prepare');
+        if (!login || !prepare || !button) return;
+        login.hidden = canPrepare;
+        prepare.hidden = !canPrepare;
+        button.disabled = !canPrepare;
+    }
+
     async function api(path, body = {}) {
+        if (path === "enrollments" || path === "renewals") setPreparationState(false);
         const response = await fetch(base + '/' + path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Emergency-CSRF': csrf }, body: JSON.stringify(body), redirect: 'error' });
         recordIssuerCalls(response);
         const data = response.status === 204 ? {} : await response.json();
-        if (!response.ok) throw new Error(data.error || 'Request failed');
+        if (!response.ok) { if (data.error === 'new_normal_login_required' || data.error === 'normal_login_required') setPreparationState(false); const failure = new Error(data.error || 'Request failed'); failure.reference = /^[a-f0-9]{32}$/.test(data.reference_id || '') ? data.reference_id : null; throw failure; }
         return data;
     }
     const safe = action => async event => {
         if (event) event.preventDefault();
-        try { message('Working…', 'busy'); await action(); if (document.getElementById('message').textContent === 'Working…') message(''); } catch (error) { message(error.message === 'new_normal_login_required' ? 'Emergency preparation needs a fresh normal login. Use the Get a new normal login for preparation or renewal button, then try again.' : error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.', 'error'); }
+        try { message('Working…', 'busy'); await action(); if (document.getElementById('message').textContent === 'Working…') message(''); } catch (error) { message(error.message === 'new_normal_login_required' ? 'Emergency preparation needs a fresh normal login. Use the Get a new normal login for preparation or renewal button, then try again.' : error.name === 'NotAllowedError' ? 'Key check cancelled. Preparation is not complete.' : error.message || 'Operation failed.', 'error'); if (error.reference) document.getElementById('message').textContent += ' Reference: ' + error.reference; }
     };
     function bind(id, action, event = 'click') { const element = document.getElementById(id); if (element) element.addEventListener(event, safe(action)); }
+
+    async function deleteStoredBinding(bindingId) {
+        const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('oidc-emergency-v1', 1);
+            request.onupgradeneeded = () => request.result.createObjectStore('credentials', { keyPath: 'ec_id' });
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(new Error('Browser storage is unavailable.'));
+        });
+        try {
+            await new Promise((resolve, reject) => {
+                const transaction = db.transaction('credentials', 'readwrite');
+                const cursor = transaction.objectStore('credentials').openCursor();
+                cursor.onsuccess = () => {
+                    const item = cursor.result;
+                    if (!item) return;
+                    if (item.value.binding_id === bindingId) item.delete();
+                    item.continue();
+                };
+                transaction.oncomplete = resolve;
+                transaction.onerror = transaction.onabort = () => reject(new Error('Key removed from the server, but browser cleanup failed. Retry browser cleanup before using emergency login.'));
+            });
+        } finally { db.close(); }
+    }
+
     async function database() {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open('oidc-emergency-v1', 1);
@@ -119,6 +155,7 @@
         if (!ul) return;
         const records = await stored(false);
         const status = root.dataset.mode === 'prepare' ? await api('status') : null;
+        if (status) setPreparationState(status.can_prepare === true);
         ul.replaceChildren();
         for (const record of records) {
             const entry = status && status.credentials.find(item => item.ec_id === record.ec_id);
@@ -134,13 +171,14 @@
             const actions = element('div', 'em-actions');
             if (root.dataset.mode === 'login') {
                 if (!expired) actions.append(button('Log in with this key', () => possession(record, true), 'em-primary'));
+                actions.append(button('Forget browser copy', async () => { if (!confirm('Forget all copies of this key in this browser? This does not revoke its server registration.')) return; await deleteStoredBinding(record.binding_id); message('Browser copies removed. Server registration was not changed.', 'success'); await list(); }));
             } else {
                 const binding = element('p', 'em-credential-meta', 'Binding ID ');
                 binding.append(element('code', null, record.binding_id));
                 row.append(binding);
                 if (entry.status === 'pending') actions.append(button('Confirm stored credential', () => possession(record, false), 'em-primary'));
                 if (entry.status === 'active' && status.can_prepare) actions.append(button('Renew with this key', async () => saveAndActivate(await api('renewals', { binding_id: record.binding_id }))));
-                actions.append(button('Remove key locally', async () => { await api('keys/' + encodeURIComponent(record.binding_id) + '/remove'); message('Key blocked locally. Any failed issuer report remains queued.', 'success'); await list(); }, 'em-danger'));
+                actions.append(button('Remove key locally', async () => { await api('keys/' + encodeURIComponent(record.binding_id) + '/remove'); await deleteStoredBinding(record.binding_id); message('Key removed from this browser and the local registry. Any failed issuer report remains queued.', 'success'); await list(); }, 'em-danger'));
             }
             if (actions.children.length) row.append(actions);
             ul.append(row);

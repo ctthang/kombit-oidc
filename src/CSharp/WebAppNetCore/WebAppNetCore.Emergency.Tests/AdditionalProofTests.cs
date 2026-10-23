@@ -78,6 +78,16 @@ namespace WebAppNetCore.Emergency.Tests
             Assert.ThrowsExactly<EmergencyFault>(() => service.Challenge(EmergencyBrowser.Read(b.HttpContext), token, "activate", b.Properties.Items["emergency_login"]));
             Assert.IsNotNull(service.Challenge(EmergencyBrowser.Read(a.HttpContext), token, "activate", a.Properties.Items["emergency_login"]));
         }
+        [DataTestMethod]
+        [DataRow("uv")][DataRow("backup")][DataRow("backedUp")]
+        public async Task PocUp_AcceptsPresenceAndValidBackupStates(string mutation)
+        {
+            using var fixture = new ProtocolFixture(); string login = fixture.Login(); var entry = await fixture.Pending(login);
+            var challenge = JsonSerializer.SerializeToElement(fixture.Service.Challenge(fixture.Browser, entry.GetProperty("emergency_credential").GetString(), "activate", login));
+            Assert.AreEqual("preferred", challenge.GetProperty("publicKey").GetProperty("userVerification").GetString());
+            await fixture.Service.FinishAsync(fixture.Browser, challenge.GetProperty("transaction_id").GetString(), "activate", fixture.Assertion(challenge.GetProperty("publicKey"), 1, mutation), login, CancellationToken.None);
+            Assert.AreEqual("active", JsonSerializer.SerializeToElement(fixture.Service.Status(login, fixture.Browser)).GetProperty("credentials")[0].GetProperty("status").GetString());
+        }
         private static TokenValidatedContext Context(IServiceProvider services, ProtocolFixture fixture, string subject)
         {
             var http = new DefaultHttpContext { RequestServices = services };

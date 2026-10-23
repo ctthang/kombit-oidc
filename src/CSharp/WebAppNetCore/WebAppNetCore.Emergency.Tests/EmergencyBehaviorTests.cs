@@ -12,6 +12,12 @@ namespace WebAppNetCore.Emergency.Tests
     [TestClass]
     public class EmergencyBehaviorTests
     {
+        [TestMethod]
+        public void BackendKey_UsesConfiguredPocTextWithoutEnvironment()
+        {
+            Assert.AreEqual("poc-key", new EmergencyOptions { ApiKey = "poc-key" }.BackendKey());
+        }
+
         [DataTestMethod]
         [DataRow(false)]
         [DataRow(true)]
@@ -31,7 +37,7 @@ namespace WebAppNetCore.Emergency.Tests
             // Assert
             Assert.IsNotNull(principal);
             Assert.IsTrue(principal.HasClaim("ROLE", "case-admin"));
-            Assert.IsFalse(principal.Claims.Any(claim => claim.Value == "normal-evidence"));
+            Assert.IsTrue(principal.Claims.Any(claim => claim.Value == "normal-evidence"));
             Assert.AreEqual(2, principal.FindAll("department").Count());
             Assert.AreEqual("Synthetic User", principal.Identity.Name);
             Assert.AreEqual("user@example.invalid", principal.FindFirst("email").Value);
@@ -39,8 +45,8 @@ namespace WebAppNetCore.Emergency.Tests
             Assert.AreEqual(requests, fixture.Requests);
             Assert.AreEqual(1, principal.FindAll("emergency_session_id").Count());
             Assert.AreEqual(session.Id, principal.FindFirst("emergency_session_id").Value);
-            Assert.IsNull(principal.FindFirst("acr"));
-            Assert.IsNull(principal.FindFirst("access_token"));
+            Assert.IsNotNull(principal.FindFirst("acr"));
+            Assert.IsNotNull(principal.FindFirst("access_token"));
             CollectionAssert.AreEquivalent(new[] { "case-admin", "read-only", "administrator" }, principal.FindAll("role").Select(claim => claim.Value).ToArray());
             Assert.IsNull(fixture.Service.Session(session.Id, "another-browser"));
             fixture.Service.SignOut(session.Id);
@@ -76,9 +82,7 @@ namespace WebAppNetCore.Emergency.Tests
 
         [DataTestMethod]
         [DataRow("up")]
-        [DataRow("uv")]
-        [DataRow("backup")]
-        [DataRow("backedUp")]
+        [DataRow("invalid-backup-state")]
         [DataRow("type")]
         [DataRow("challenge")]
         [DataRow("origin")]
@@ -137,7 +141,7 @@ namespace WebAppNetCore.Emergency.Tests
         }
 
         [TestMethod]
-        public async Task Remove_Offline_BlocksImmediatelyAndQueuesReport()
+        public async Task Remove_Offline_DeletesLocalRecordsAndQueuesReport()
         {
             // Arrange
             using var fixture = new ProtocolFixture();
@@ -149,6 +153,10 @@ namespace WebAppNetCore.Emergency.Tests
             await fixture.Service.RemoveAsync(login, fixture.Browser, fixture.Binding, CancellationToken.None);
             // Assert
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
+            Assert.AreEqual(0, JsonSerializer.SerializeToElement(fixture.Service.Status(login, fixture.Browser)).GetProperty("credentials").GetArrayLength());
+            Assert.ThrowsExactly<EmergencyFault>(() => fixture.Service.Challenge(fixture.Browser, entry.GetProperty("emergency_credential").GetString(), "login", null));
+            fixture.Restart();
+            Assert.AreEqual(0, JsonSerializer.SerializeToElement(fixture.Service.Status(fixture.Login(), fixture.Browser)).GetProperty("credentials").GetArrayLength());
             Assert.AreEqual(1, QueuedRemovals(fixture));
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
             fixture.Offline = false;

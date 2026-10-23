@@ -21,7 +21,7 @@ namespace WebAppNetCore.EmergencyCredential
             fido = new Fido2(configuration, null);
         }
         public AssertionOptions Options(string credentialId) => AssertionOptions.Create(configuration, StrictJson.Bytes(StrictJson.Id()),
-            new[] { new PublicKeyCredentialDescriptor(StrictJson.Bytes(credentialId)) }, UserVerificationRequirement.Required, new AuthenticationExtensionsClientInputs());
+            new[] { new PublicKeyCredentialDescriptor(StrictJson.Bytes(credentialId)) }, UserVerificationRequirement.Preferred, new AuthenticationExtensionsClientInputs());
 
         public async Task<uint> VerifyAsync(JsonElement credential, PossessionTransaction transaction, CancellationToken cancellation)
         {
@@ -36,7 +36,7 @@ namespace WebAppNetCore.EmergencyCredential
                 JsonElement response = credential.GetProperty("response");
                 StrictJson.Members(response, "authenticatorData", "clientDataJSON", "signature", "userHandle");
                 byte[] data = StrictJson.Bytes(StrictJson.Text(response, "authenticatorData", 16384));
-                if (data.Length < 37 || (data[32] & 5) != 5 || (data[32] & 24) != 0)
+                if (data.Length < 37 || (data[32] & 1) == 0 || ((data[32] & 16) != 0 && (data[32] & 8) == 0))
                 {
                     throw StrictJson.Bad();
                 }

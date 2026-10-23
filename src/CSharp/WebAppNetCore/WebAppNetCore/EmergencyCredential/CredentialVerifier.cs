@@ -93,19 +93,19 @@ namespace WebAppNetCore.EmergencyCredential
                 }
                 long issued = StrictJson.Integer(payload, "iat"), notBefore = StrictJson.Integer(payload, "nbf"), expires = StrictJson.Integer(payload, "exp");
                 if (issued > now.ToUnixTimeSeconds() || notBefore > now.ToUnixTimeSeconds() || notBefore < issued
-                    || expires <= now.ToUnixTimeSeconds() || expires <= issued || expires - issued > 14 * 86400)
+                    || expires <= now.ToUnixTimeSeconds() || expires <= issued || expires - issued > 30 * 86400)
                 {
                     throw StrictJson.Bad();
                 }
                 JsonElement source = payload.GetProperty("source"), webauthn = payload.GetProperty("webauthn");
                 if (StrictJson.Text(source, "protocol") != "oidc" || StrictJson.Text(source, "issuer") != options.NormalIssuer
                     || StrictJson.Text(webauthn, "rp_id") != options.RelyingPartyId || StrictJson.Text(webauthn, "origin") != options.Origin
-                    || StrictJson.Text(webauthn, "hardware_policy") != "poc-uv-nonbackup")
+                    || StrictJson.Text(webauthn, "hardware_policy") != "poc-up")
                 {
                     throw StrictJson.Bad();
                 }
                 long accepted = StrictJson.Integer(source, "accepted_at");
-                if (accepted > issued || accepted < issued - 600)
+                if (accepted > issued || accepted < issued - 86400)
                 {
                     throw StrictJson.Bad();
                 }

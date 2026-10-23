@@ -1,5 +1,8 @@
 # Local emergency-access setup record
 
+> Historical setup/test record. For current configuration-file API keys, complete normal claim snapshots, and 24-hour / 1-hour / 30-day lifetimes, follow the current emergency setup guide. Environment-variable and shorter-lifetime instructions below describe the earlier deployment.
+
+
 Date: 20 October 2026. This records the setup performed for the local OIDC example and Identify tenant. For reusable instructions, see [README-emergency.md](README-emergency.md).
 
 > Later change: the local operator role, operator page, and acceptance switch were removed. A prepared browser can now log in without operator approval, and `OIDC_EMERGENCY_OPERATOR_KEY` is no longer used. The steps below are kept as a record of the original setup.
@@ -103,3 +106,28 @@ Local execution evidence and the reviewed setup script are under `%TEMP%\codex-o
 Server setup is complete, and emergency acceptance is off. A full browser preparation and physical-authenticator login were not performed by the setup script.
 
 The user must sign out and perform a fresh normal login, open `/emergency`, and complete registration, browser storage/read-back, and possession confirmation. Then sign in at `/emergency/operator` with the new operator key and activate acceptance deliberately. The README includes the local clipboard command for that key. Preserve the deployed emergency configuration during future publishes; the source template remains disabled by default.
+## October 23, 2026: deployed PoC configuration correction
+
+Verified the newly deployed dev520 Runtime and OIDC application support direct `ApiKey` configuration. Updated `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\issuer-settings.json` to use the existing backend key values directly in each client entry and set record/enrollment/credential lifetimes to 24 hours / 1 hour / 30 days. No key rotation or state deletion was performed.
+
+Updated `C:\ProgramData\SafewhereSamples\OidcEmergency\dev520\emergency-settings.json` and synchronized its `EmergencyCredential` section to `C:\inetpub\wwwroot\kombitoidc\appsettings.json`, because the application does not automatically load the external JSON. Removed retired access-token, operator, and claim-filter options. Enabled the dedicated emergency Information-level logging category for Console and Debug providers. Existing identifiers, encryption/trust files, protection keys, and state paths were preserved.
+
+Stopped and started only Identify dev520 and the OIDC pool. Both health endpoints returned HTTP 200; the OIDC response included its diagnostic reference header. Verified the configured OIDC API keys match. Configuration backups are at `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\backups\poc-settings-20261023-160041` (settings-0.json=issuer, settings-1.json=external OIDC, settings-2.json=deployed appsettings).
+
+Also corrected a stale deployed `wwwroot\js\emergency-credential.js` that still displayed the old local-block message and lacked browser cleanup/control switching. Copied the current source script, verified its hash, and refreshed the embedded browser without restarting the app. Its backup is `C:\ProgramData\SafewhereSamples\OidcEmergency\backups\browser-script-20261023-160415.js`.
+
+Fresh normal login was observed in the embedded browser. The preparation page now shows only **Prepare this browser**, with no stored credential listed. New credential preparation and verification of its 30-day lifetime and complete ID-token claim snapshot are the next test steps.
+
+### PoC authenticator-policy alignment
+
+The first live preparation after the settings update reached Identify successfully (enrollment and completion both returned 201) but failed local validation with `invalid_request`, reference `69f827542bbb47218d9b29e9924d1e01`. The deployed issuer matched the current build and issued `hardware_policy=poc-up`; the clients still accepted only `poc-uv-nonbackup`.
+
+The user explicitly approved aligning both clients to `poc-up`: require user presence, prefer user verification, and allow valid backup-eligible/backed-up passkeys. Both client sources, UI text, fixtures, and guides were updated. Invalid BS-without-BE combinations remain rejected, along with invalid signature/origin/RP/ownership/challenge/counter proofs. Verification passed 69 OIDC tests and 105 SAML tests; focused review found no actionable issues.
+
+The updated OIDC DLL/PDB and static JS/CSS were deployed and hash-checked. Backup: `C:\Users\caotr\AppData\Local\Temp\oidc-poc-up-deploy\backup-20261023-161420`. OIDC health returned 200. SAML source is updated, but its policy-alignment deployment is still pending. A fresh OIDC login completed through SSO and a new preparation was started for the user's key/passkey prompts. The earlier issued-but-unaccepted binding may still count toward the issuer's key limit; avoid repeated new enrollments if this next attempt fails.
+
+The first retry was rejected by the authenticator because the failed earlier registration was still in Identify's exclusion list. The issuer audit identified the orphaned binding ending `Et02M8`. With explicit user approval, that specific binding was revoked through the authenticated issuer API (HTTP 204). A fresh normal login then completed through SSO and preparation was retried. No other binding was revoked by this cleanup.
+
+### Successful end-to-end OIDC verification
+
+The clean retry completed registration, credential storage, and possession verification. The new credential became Active and expires on November 22, 2026, confirming the 30-day issuer lifetime. Emergency login with that credential then succeeded. The emergency home page displays the original ID-token snapshot, including sub, sid, jti, repeated aud values, nonce, at_hash, azp, iat, nbf, exp, and iss, alongside locally generated emergency-session controls. No raw token or claim value is recorded here. The active session's own eight-hour limit remains independent of the credential lifetime and original ID-token expiry.

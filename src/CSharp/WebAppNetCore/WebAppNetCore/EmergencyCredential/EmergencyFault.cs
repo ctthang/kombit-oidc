@@ -6,6 +6,6 @@ namespace WebAppNetCore.EmergencyCredential
     {
         public int Status { get; }
         public string Code { get; }
-        public EmergencyFault(int status, string code) : base(code) { Status = status; Code = code; }
+        public EmergencyFault(int status, string code, Exception inner = null) : base(code, inner) { Status = status; Code = code; }
     }
 }

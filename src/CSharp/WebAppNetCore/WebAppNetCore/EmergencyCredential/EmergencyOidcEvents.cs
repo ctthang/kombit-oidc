@@ -24,12 +24,13 @@ namespace WebAppNetCore.EmergencyCredential
             JwtSecurityToken jwt = context.SecurityToken;
             if (jwt == null)
             {
+                EmergencyDiagnostics.Write(context.HttpContext, "normal_login_capture_skipped", 400);
                 return Task.CompletedTask;
             }
             issuer = jwt.Issuer;
             subject = jwt.Subject;
             id = jwt.Id;
-            expires = Math.Min(new DateTimeOffset(jwt.ValidTo, TimeSpan.Zero).ToUnixTimeSeconds(), new DateTimeOffset(jwt.IssuedAt, TimeSpan.Zero).ToUnixTimeSeconds() + 600);
+            expires = Math.Min(new DateTimeOffset(jwt.ValidTo, TimeSpan.Zero).ToUnixTimeSeconds(), new DateTimeOffset(jwt.IssuedAt, TimeSpan.Zero).ToUnixTimeSeconds() + 86400);
             context.HttpContext.Items[Staged] = new AcceptedLogin { Issuer = issuer, Subject = subject, TokenReference = id, Expires = expires };
             return Task.CompletedTask;
         }
@@ -57,10 +58,12 @@ namespace WebAppNetCore.EmergencyCredential
                 if (context.HttpContext.Items.TryGetValue(Staged, out object staged) && staged is AcceptedLogin login)
                 {
                     context.Properties.Items["emergency_login"] = runtime.Service.Capture(browser, login.Subject, login.Issuer, login.TokenReference, login.Expires);
+                    EmergencyDiagnostics.Write(context.HttpContext, "normal_login_captured");
                 }
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                EmergencyDiagnostics.Write(context.HttpContext, "normal_login_capture_failed", 503, exception);
                 // Optional preparation failure must not interrupt an accepted normal login.
                 context.Properties.Items.Remove("emergency_login");
             }

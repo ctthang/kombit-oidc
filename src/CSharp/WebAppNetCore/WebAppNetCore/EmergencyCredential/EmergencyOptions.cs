@@ -18,6 +18,13 @@ namespace WebAppNetCore.EmergencyCredential
         public string EncryptionPrivateKeyFile { get; set; } = "";
         public string EncryptionKeyId { get; set; } = "";
         public string TrustedSigningKeysFile { get; set; } = "";
+        public string ApiKey { get; set; }
+        public string BackendKey()
+        {
+            if (ApiKey == null) return Secret(ApiKeyEnvironmentVariable);
+            if (string.IsNullOrWhiteSpace(ApiKey) || ApiKey.Length > 512 || ApiKey.Any(char.IsControl)) throw new InvalidOperationException("Invalid configured API key.");
+            return ApiKey;
+        }
         public string ApiKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_ISSUER_KEY";
         public int SessionMinutes { get; set; } = 480;
 
@@ -44,7 +51,7 @@ namespace WebAppNetCore.EmergencyCredential
             {
                 throw new InvalidOperationException("Use a separate protection key directory.");
             }
-            Secret(ApiKeyEnvironmentVariable);
+            BackendKey();
         }
 
         public static string Secret(string name)

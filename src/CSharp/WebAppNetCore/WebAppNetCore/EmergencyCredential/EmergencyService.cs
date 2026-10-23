@@ -47,7 +47,7 @@ namespace WebAppNetCore.EmergencyCredential
                 {
                     throw new EmergencyFault(503, "login_capacity");
                 }
-                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 600), ForgetAfter = Now + 28800 };
+                AcceptedLogin login = new AcceptedLogin { Id = StrictJson.Id(), Browser = browser, Subject = subject, Issuer = normalIssuer, TokenReference = reference, Expires = Math.Min(expires, Now + 86400), ForgetAfter = Now + 172800 };
                 logins.Add(login.Id, login);
                 return login.Id;
             }
@@ -371,13 +371,12 @@ namespace WebAppNetCore.EmergencyCredential
                 identity.AddClaim(new Claim("emergency_expires", session.Expires.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                 identity.AddClaim(new Claim("emergency", "true"));
                 identity.AddClaim(new Claim("local_assurance", "emergency-possession"));
-                // Every claim from the normal login's ID token is kept, except protocol, token and assurance claims.
+                // Original normal-login claims are retained as historical snapshot data.
                 foreach (SnapshotClaim claim in entry.Credential.Claims)
                 {
-                    if (Reserved(claim.Type))
-                    {
-                        continue;
-                    }
+                    // Source tokens cannot replace locally generated emergency controls.
+                    if (claim.Type.StartsWith("emergency", StringComparison.OrdinalIgnoreCase) || claim.Type.StartsWith("local_", StringComparison.OrdinalIgnoreCase)) { continue; }
+
                     identity.AddClaim(new Claim(claim.Type, claim.Value, claim.ValueType));
                 }
                 string display = identity.FindFirst("name")?.Value ?? identity.FindFirst(ClaimTypes.Name)?.Value;
@@ -435,12 +434,17 @@ namespace WebAppNetCore.EmergencyCredential
                         throw new EmergencyFault(404, "binding_not_found");
                     }
                     Block(state, bindingId);
+                    foreach (string credentialId in state.Credentials.Where(pair => pair.Value.BindingId == bindingId).Select(pair => pair.Key).ToArray())
+                    {
+                        state.Credentials.Remove(credentialId);
+                    }
+                    state.Bindings.Remove(bindingId);
                     state.RemovalQueue.Add(bindingId);
                     Audit(state, "key_removed");
                     return true;
                 });
             }
-            // The local block is durable even when the backend is unavailable.
+            // Local deletion is durable even when the issuer is unavailable; only its revocation ID is queued.
             try
             {
                 await ReportRemovalAsync(bindingId, cancellation);

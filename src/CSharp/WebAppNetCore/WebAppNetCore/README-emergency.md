@@ -1,6 +1,14 @@
 # Emergency access PoC
+## Current PoC configuration (October 23, 2026)
 
-Emergency support is disabled by default. This implementation belongs to the OIDC example. It shares no source, project, browser bundle, or implementation package with the SAML example. It uses public Fido2 4.1.0 and .NET 8. Identify keeps Safewhere.Fido2. The current key-protection baseline is Windows.
+Configure a matching `ApiKey` string directly in each Identify `Clients[]` entry and in that client's settings. For example, use `"ApiKey": "oidc-poc-key"` on both OIDC sides and a different `"ApiKey": "saml-poc-key"` on both SAML sides. Plain nonempty text or a GUID is supported, up to 512 characters without control characters. No issuer-key environment variables are required. Existing environment-variable settings are supported only as a legacy fallback when ApiKey is absent. Do not print live keys in diagnostics.
+
+The issuer defaults and upper bounds are RecordLifetime=`1.00:00:00` (24 hours), EnrollmentLifetime=`01:00:00` (1 hour), and CredentialLifetime=`30.00:00:00` (30 days). The enrollment deadline is capped by its source record's expiry. Client preparation is also bounded by normal-login validity. Both clients accept the corresponding 30-day credentials; revocations are retained for 30 days plus five minutes. WebAuthn proof challenges remain short-lived. Deploy issuer and client updates together before issuing longer credentials.
+
+OIDC uses the normal ID token; SAML uses the normal assertion. Normal protocol, assurance, identity, application, and repeated claims are retained in the credential snapshot and emergency principal. Their original exp/iat/iss/acr values describe the original login; the emergency session has its own independently enforced expiry and authentication type. Source claims cannot replace internal `emergency*` or `local_*` session controls. General size, signature, issuer, audience, and input validation remain enforced. Renew after a fresh normal login to obtain a new snapshot. Attributes absent from the ID token/assertion cannot be invented by the client.
+
+
+Emergency support is disabled by default. This implementation belongs to the OIDC example. It shares no source, project, browser bundle, or implementation package with the SAML example. It uses public Fido2 4.1.0 and .NET 10. Identify keeps Safewhere.Fido2. The current key-protection baseline is Windows.
 
 The [local setup record](README-emergency-setup-record.md) records the actual configuration steps, code correction, verification, and remaining browser actions for the dev520 deployment.
 
@@ -57,9 +65,9 @@ Use Identify's `docs/features/US39805/issuer-settings.example.json` as the templ
 | `EmergencyAudience` | Audience used by the key tool |
 | `Origin`, `RelyingPartyId` | UserSystem origin and RP ID from step 1 |
 | `EncryptionKeyId`, `EncryptionModulus`, `EncryptionExponent` | `kid`, `n`, and `e` from `encryption-public.jwk.json` |
-| `ApiKeyEnvironmentVariable` | `OIDC_EMERGENCY_ISSUER_KEY` in the Identify Runtime process |
+| `ApiKey` | Same value as `EmergencyCredential.ApiKey` in this sample |
 | `IssuanceEnabled` | `true` |
-| `AllowedClaimTypes` | The approved types present in the normal ID token |
+| `AllowedClaimTypes` | Optional legacy issuer setting; all normal ID-token claims are captured |
 | `PreserveNormalClaims` | `true`, so every claim in the normal ID token is signed into the emergency credential |
 
 Remove unused example clients. Every listed client is validated, even if its issuance switch is false. Each client needs a distinct encryption key, audience, RP ID, and backend secret.
@@ -74,13 +82,9 @@ Set these entries in Identify Runtime's effective `<appSettings>` configuration.
 
 For an installed tenant, this is the Runtime configuration under that tenant, not the source repository's Web.config. Check external configuration overrides. Identify supplies `TenantId` from its own tenant configuration.
 
-### 4. Provision process secrets
+### 4. Configure the matching API key
 
-Use a random backend secret of 32–512 characters. Short placeholders do not work, even when the environment variable exists. Generate the value from a cryptographic random-number generator, not a memorable password. The value must be the same in Identify and the sample. It is not the normal OIDC client secret.
-
-The example variable name is `OIDC_EMERGENCY_ISSUER_KEY`; make it available to both application processes.
-
-Use your secret store or IIS application-pool environment variables. An interactive PowerShell variable is not inherited by an already running IIS worker. A machine environment variable being present also does not prove that an existing worker has received it. Configure the intended pools and restart them. Keep secret values out of JSON templates, source control, command output, and browser code.
+Set `EmergencyCredential.ApiKey` to the same plain text or GUID as the issuer client entry. No IIS environment variable is needed. This is separate from the normal OIDC client secret.
 
 ### 5. Apply the sample settings
 
@@ -196,6 +200,30 @@ Results contain no request/response bodies, API keys, token references, emergenc
 
 The emergency session gets the claims from the normal login's ID token. Identify captures the claims it issued in the normal OIDC ID token and signs them into the emergency credential's `claims_snapshot`; set `PreserveNormalClaims: true` on the matching Identify issuer client so that all of them are included. The browser never supplies a claims list. The sample has no claim-type or role allowlist: it projects every snapshot claim into the emergency principal, preserving claim types, values, value types, and repeated claims. It does not fetch current claims during offline login.
 
-Token metadata, raw tokens, and emergency-reserved claims are still excluded, as are normal assurance claims such as `acr`, `amr`, `auth_time`, and LoA claims. `emergency=true`, `local_assurance=emergency-possession`, and local session expiry remain authoritative. A `name` or standard name claim replaces the generic Prepared user display. Original claim names are preserved rather than automatically applying OIDC inbound claim-name mapping.
+Normal-login claim types and values, including protocol metadata and assurance claims, are preserved as historical snapshot data. Local `emergency*` and `local_*` control claims remain reserved so a source token cannot override the active session identifier or expiry. The emergency session authenticates and expires independently of the original token. Roles and SAML BPP claims are not allowlisted or rewritten.
 
 Claims are fixed when the credential is issued. Role or attribute changes after preparation are not reflected until renewal. Attributes that were never present in the ID token cannot be invented. Access-token and UserInfo claims are not used.
+
+## Remove a local key
+
+**Remove key locally** deletes the binding and all associated credential versions from the client registry and this browser's IndexedDB, including renewed/replaced copies. It ends existing sessions for that binding and rejects replay of its previously issued credentials. The row disappears rather than becoming Blocked. An offline removal is immediately effective and survives restart; only the binding identifier needed to retry issuer revocation is retained in the internal queue. Other browsers may retain stale copies, but the server rejects them. This removes the application registration; it does not erase a hardware authenticator's internal key through WebAuthn.
+
+If removal succeeds on the server but browser cleanup fails or the response is lost, open the emergency-login page and use **Forget browser copy** for that key. This clears all its versions from this browser without contacting the server; it does not revoke an otherwise valid server registration.
+
+The preparation page shows exactly one next action: **Prepare this browser** while a fresh unused normal-login record is eligible, or **Get a new normal login for preparation or renewal** otherwise. Starting preparation/renewal consumes that record, so the page switches back to the login action. Pending credentials can still be confirmed using their own key-check control.
+
+## Trace an emergency request
+
+The client generates a new `X-Emergency-Reference` response header for each emergency request. Controller error JSON also includes `reference_id`, and the browser error message displays it. Copy that reference to find the matching server events; it is an opaque diagnostic ID, not a login token.
+
+The logger category is `WebAppNetCore.EmergencyCredential.Diagnostics`. The example configuration enables Information for that category on the Console and Debug providers while retaining Warning for other categories. When merging configuration into IIS, preserve that category override under both `Logging:Console:LogLevel` and `Logging:Debug:LogLevel`; any other active logging provider needs the same category level.
+
+Look for `request_started`, `issuer_calls`, `action_failed`, and `request_completed` with the same reference. Completion includes HTTP status and elapsed milliseconds. Issuer-call summaries include normalized endpoint templates, statuses and durations, so an HTTP 502 can be traced to the actual upstream response. Normal-login capture emits `normal_login_captured`, `normal_login_capture_skipped`, or `normal_login_capture_failed`; those callback events have their own request reference.
+
+The logs use the application's configured ASP.NET Core logging providers. Debug output is visible in the debugger and Console output in the hosting process. This change does not create a file logger. On IIS, use your configured persistent logging sink, or temporarily enable ASP.NET Core Module stdout logging to a restricted writable location when troubleshooting; disable temporary stdout logging afterward and manage retention. If Information events are absent, check provider-specific log-level overrides before retrying the flow.
+
+Events omit request bodies, query values, cookies, API keys, token/credential strings, binding IDs, claim values, raw exception messages and source paths. Failure records include bounded exception types/HResults, including initialization causes. Logging failures are swallowed so authentication behavior is preserved. A successful request with a failed issuer call may represent an offline-safe local operation with revocation queued; inspect the endpoint and issuer summary together.
+
+## Authenticator policy compatibility
+
+The current issuer and both clients use `poc-up`: presence is required, verification is preferred, and valid backup-eligible/backed-up passkeys are accepted. A backup-state bit without backup eligibility is rejected. Signature, origin/RP, one-use challenge, credential ownership, and counter checks remain enforced. Credentials labeled with the older `poc-uv-nonbackup` policy must be renewed to the current policy; they are not silently reinterpreted.

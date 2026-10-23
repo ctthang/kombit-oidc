@@ -22,14 +22,14 @@
             <h1>Prepare this browser</h1>
             <p class="em-lead">Store an emergency credential in this browser so you can log in locally when Identify is unavailable.</p>
             <ol class="em-steps">
-                <li>
+                <li id="normal-login-step" hidden="@(Model.CanPrepare)">
                     <h2>Get a fresh normal login</h2>
                     <p>Preparation and renewal each need a new, unused normal login.</p>
                     <a id="normal-login" class="button-link" href="@Url.Action("NormalLogin", "Emergency")">Get a new normal login for preparation or renewal</a>
                 </li>
-                <li>
+                <li id="prepare-step" hidden="@(!Model.CanPrepare)">
                     <h2>Register and confirm your key</h2>
-                    <p>Use a key that requires user verification and does not use passkey backup. You will be asked to use your key twice.</p>
+                    <p>Use a security key or passkey. User presence is required; user verification is preferred. You will be asked to use your key twice.</p>
                     <button id="prepare" class="em-primary" type="button" disabled="@(!Model.CanPrepare)">Prepare this browser</button>
                 </li>
             </ol>

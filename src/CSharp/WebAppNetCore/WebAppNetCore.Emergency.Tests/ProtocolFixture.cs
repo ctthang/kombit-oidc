@@ -129,7 +129,7 @@ namespace WebAppNetCore.Emergency.Tests
                 client["crossOrigin"] = true;
             if (mutation == "topOrigin")
                 client["topOrigin"] = "https://other.invalid";
-            byte flags = mutation == "up" ? (byte)4 : mutation == "uv" ? (byte)1 : mutation == "backup" ? (byte)13 : mutation == "backedUp" ? (byte)29 : (byte)5;
+            byte flags = mutation == "invalid-backup-state" ? (byte)21 : mutation == "up" ? (byte)4 : mutation == "uv" ? (byte)1 : mutation == "backup" ? (byte)13 : mutation == "backedUp" ? (byte)29 : (byte)5;
             byte[] clientData = Encoding.UTF8.GetBytes(client.ToJsonString());
             byte[] data = SHA256.HashData(Encoding.UTF8.GetBytes(mutation == "rp" ? "wrong.invalid" : Options.RelyingPartyId)).Concat(new[] { flags, (byte)(count >> 24), (byte)(count >> 16), (byte)(count >> 8), (byte)count }).ToArray();
             byte[] signed = data.Concat(SHA256.HashData(clientData)).ToArray();
@@ -193,7 +193,7 @@ namespace WebAppNetCore.Emergency.Tests
                     cose_alg = elliptic ? -7 : -257,
                     sign_count = 0L,
                     aaguid = Guid.Empty.ToString(),
-                    hardware_policy = "poc-uv-nonbackup"
+                    hardware_policy = "poc-up"
                 },
                 source = new
                 {
@@ -222,7 +222,7 @@ namespace WebAppNetCore.Emergency.Tests
                     payload["exp"] = now - 1;
                     break;
                 case "long-lifetime":
-                    payload["exp"] = now + 1209601;
+                    payload["exp"] = now + 2592001;
                     break;
                 case "profile":
                     payload["profile_version"] = "unknown";

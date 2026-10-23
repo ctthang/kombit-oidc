@@ -15,6 +15,16 @@ namespace WebAppNetCore.EmergencyCredential
         }
         public async Task InvokeAsync(HttpContext context, EmergencyRuntime runtime)
         {
+            if (!context.Request.Path.StartsWithSegments("/emergency")) { await InvokeCoreAsync(context, runtime); return; }
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            bool failed = false;
+            EmergencyDiagnostics.Write(context, "request_started");
+            try { await InvokeCoreAsync(context, runtime); }
+            catch (Exception exception) { failed = true; EmergencyDiagnostics.Write(context, "request_failed", 500, exception); throw; }
+            finally { EmergencyDiagnostics.Write(context, "request_completed", failed ? 500 : context.Response.StatusCode, elapsedMilliseconds: timer.ElapsedMilliseconds); }
+        }
+        private async Task InvokeCoreAsync(HttpContext context, EmergencyRuntime runtime)
+        {
             bool featurePath = context.Request.Path.StartsWithSegments("/emergency");
             if (featurePath)
             {
