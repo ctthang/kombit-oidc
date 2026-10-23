@@ -17,20 +17,15 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement active = await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             LocalSession session = await fixture.Prove(active, "login", null, 2);
             fixture.IssuerStateId = StrictJson.Id();
 
             // Act
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
             fixture.Restart();
 
             // Assert
-            Assert.IsFalse(fixture.Service.Accepting);
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
-            op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             Assert.ThrowsExactly<EmergencyFault>(() => fixture.Service.Challenge(fixture.Browser, active.GetProperty("emergency_credential").GetString(), "login", null));
             using var state = OpenStateAfterStopping(fixture);
             Assert.AreEqual(fixture.IssuerStateId, state.Read(value => value.IssuerStateId));
@@ -43,11 +38,9 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement active = await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
 
             // Act
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
             fixture.Restart();
             fixture.Offline = true;
             int requests = fixture.Requests;
@@ -69,14 +62,11 @@ namespace WebAppNetCore.Emergency.Tests
                 state.Update(value => { value.IssuerStateId = null; value.RevocationCursor = 17; return true; });
             }
             fixture.Restart();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
 
             // Act
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
 
             // Assert
-            Assert.IsFalse(fixture.Service.Accepting);
             using var persisted = OpenStateAfterStopping(fixture);
             Assert.AreEqual(0L, persisted.Read(value => value.RevocationCursor));
             Assert.AreEqual(fixture.IssuerStateId, persisted.Read(value => value.IssuerStateId));
@@ -91,10 +81,9 @@ namespace WebAppNetCore.Emergency.Tests
             await fixture.Active();
             fixture.RevocationSequenceOffset = 42;
             await fixture.Service.RemoveAsync(fixture.Login(), fixture.Browser, fixture.Binding, CancellationToken.None);
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
 
             // Act
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
 
             // Assert
             using var state = OpenStateAfterStopping(fixture);
@@ -108,13 +97,10 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement active = await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             fixture.IssuerStateId = null;
 
             // Act and Assert
-            await Assert.ThrowsExactlyAsync<EmergencyFault>(() => fixture.Service.SynchronizeAsync(op, CancellationToken.None));
-            Assert.IsTrue(fixture.Service.Accepting);
+            await Assert.ThrowsExactlyAsync<EmergencyFault>(() => fixture.Service.SynchronizeIssuerAsync(CancellationToken.None));
             Assert.IsNotNull(await fixture.Prove(active, "login", null, 2));
         }
 
@@ -124,8 +110,6 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             fixture.BeforeSigningKeysResponse = () =>
             {
                 fixture.BeforeSigningKeysResponse = null;
@@ -134,10 +118,9 @@ namespace WebAppNetCore.Emergency.Tests
             };
 
             // Act
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
 
             // Assert
-            Assert.IsFalse(fixture.Service.Accepting);
             using var state = OpenStateAfterStopping(fixture);
             Assert.AreEqual(fixture.IssuerStateId, state.Read(value => value.IssuerStateId));
             Assert.AreEqual(fixture.Trust, state.Read(value => value.SigningKeys));
@@ -150,7 +133,6 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
             var reached = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             fixture.BeforeSigningKeysResponse = async () =>
@@ -159,9 +141,9 @@ namespace WebAppNetCore.Emergency.Tests
                 reached.SetResult(true);
                 await release.Task;
             };
-            Task first = fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            Task first = fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
             await reached.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Task second = fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            Task second = fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
 
             // Act
             fixture.RotateIssuerState();
@@ -180,22 +162,18 @@ namespace WebAppNetCore.Emergency.Tests
         {
             // Arrange
             using var fixture = new ProtocolFixture();
-            await fixture.Active();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
+            JsonElement active = await fixture.Active();
             fixture.RotateIssuerState();
             fixture.FailSigningKeys = true;
 
             // Act
-            await Assert.ThrowsExactlyAsync<System.Net.Http.HttpRequestException>(() => fixture.Service.SynchronizeAsync(op, CancellationToken.None));
+            await Assert.ThrowsExactlyAsync<System.Net.Http.HttpRequestException>(() => fixture.Service.SynchronizeIssuerAsync(CancellationToken.None));
             fixture.Restart();
-            op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
 
             // Assert
-            Assert.IsFalse(fixture.Service.Accepting);
-            Assert.ThrowsExactly<EmergencyFault>(() => fixture.Service.Acceptance(op, true, 60));
+            Assert.ThrowsExactly<EmergencyFault>(() => fixture.Service.Challenge(fixture.Browser, active.GetProperty("emergency_credential").GetString(), "login", null));
             fixture.FailSigningKeys = false;
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
             using var state = OpenStateAfterStopping(fixture);
             Assert.AreEqual(fixture.Trust, state.Read(value => value.SigningKeys));
             Assert.IsFalse(state.Read(value => value.IssuerTrustRefreshRequired));

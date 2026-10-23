@@ -25,7 +25,6 @@ namespace WebAppNetCore.Emergency.Tests
         public readonly string Binding = StrictJson.Id();
         public readonly string Authenticator = StrictJson.Id();
         public readonly string Handle = StrictJson.Id();
-        public readonly string OperatorSecret = StrictJson.Id();
         public readonly TestClock Clock = new TestClock();
         public EmergencyOptions Options { get; }
         public EmergencyService Service { get; private set; }
@@ -74,12 +73,10 @@ namespace WebAppNetCore.Emergency.Tests
                 EncryptionKeyId = "test-encryption",
                 TrustedSigningKeysFile = Path.Combine(Root, "trust.json"),
                 ApiKeyEnvironmentVariable = "TEST_ISSUER_" + unique,
-                OperatorKeyEnvironmentVariable = "TEST_OPERATOR_" + unique,
                 AllowedClaimTypes = new[] { "email", "role", "acr", "access_token", "emergency_session_id" },
                 AllowedRoles = new[] { "read-only" }
             };
             Environment.SetEnvironmentVariable(Options.ApiKeyEnvironmentVariable, StrictJson.Id());
-            Environment.SetEnvironmentVariable(Options.OperatorKeyEnvironmentVariable, OperatorSecret);
             File.WriteAllBytes(Options.EncryptionPrivateKeyFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(encryption.ExportRSAPrivateKeyPem()), SHA256.HashData(Encoding.UTF8.GetBytes("OidcSample.Emergency.EncryptionKey.v1|" + Options.Audience)), DataProtectionScope.LocalMachine));
             ECParameters pub = signing.ExportParameters(false);
             Trust = JsonSerializer.Serialize(new
@@ -375,7 +372,6 @@ namespace WebAppNetCore.Emergency.Tests
                 ecKey.Dispose();
                 signing.Dispose();
                 Environment.SetEnvironmentVariable(Options.ApiKeyEnvironmentVariable, null);
-                Environment.SetEnvironmentVariable(Options.OperatorKeyEnvironmentVariable, null);
                 string parent = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "OidcEmergencyTests")) + Path.DirectorySeparatorChar;
                 if (Path.GetFullPath(Root).StartsWith(parent, StringComparison.OrdinalIgnoreCase))
                     Directory.Delete(Root, true);

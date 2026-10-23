@@ -2,6 +2,8 @@
 
 Date: 20 October 2026. This records the setup performed for the local OIDC example and Identify tenant. For reusable instructions, see [README-emergency.md](README-emergency.md).
 
+> Later change: the local operator role, operator page, and acceptance switch were removed. A prepared browser can now log in without operator approval, and `OIDC_EMERGENCY_OPERATOR_KEY` is no longer used. The steps below are kept as a record of the original setup.
+
 ## Deployment and identifiers
 
 | Item | Value |

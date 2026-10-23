@@ -55,17 +55,6 @@ namespace WebAppNetCore.EmergencyCredential
                 }
             }
         }
-        public bool Accepting
-        {
-            get
-            {
-                try
-                {
-                    return Options.Enabled && Service.Accepting;
-                }
-                catch (Exception) { return false; }
-            }
-        }
         public void Dispose()
         {
             lock (gate)

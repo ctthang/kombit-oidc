@@ -49,7 +49,7 @@ namespace WebAppNetCore.EmergencyCredential
                     }
                     if (state.IssuerTrustRefreshRequired)
                     {
-                        if (state.SigningKeys != null || state.Acceptance || state.Sessions.Count != 0)
+                        if (state.SigningKeys != null || state.Sessions.Count != 0)
                         {
                             throw new InvalidOperationException();
                         }
@@ -72,7 +72,6 @@ namespace WebAppNetCore.EmergencyCredential
                 }
                 if (File.Exists(disabled))
                 {
-                    state.Acceptance = false;
                     state.Generation++;
                     state.Sessions.Clear();
                     Persist(state);

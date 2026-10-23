@@ -19,7 +19,6 @@ namespace WebAppNetCore.EmergencyCredential
         public string EncryptionKeyId { get; set; } = "";
         public string TrustedSigningKeysFile { get; set; } = "";
         public string ApiKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_ISSUER_KEY";
-        public string OperatorKeyEnvironmentVariable { get; set; } = "OIDC_EMERGENCY_OPERATOR_KEY";
         public bool UseNormalAccessTokenClaims { get; set; }
         public bool PreserveNormalClaims { get; set; }
         public string[] AllowedClaimTypes { get; set; } = new[] { "email" };
@@ -51,7 +50,6 @@ namespace WebAppNetCore.EmergencyCredential
                 throw new InvalidOperationException("Use a separate protection key directory.");
             }
             Secret(ApiKeyEnvironmentVariable);
-            Secret(OperatorKeyEnvironmentVariable);
         }
 
         public static string Secret(string name)

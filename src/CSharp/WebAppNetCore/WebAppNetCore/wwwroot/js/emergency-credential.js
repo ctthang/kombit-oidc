@@ -19,7 +19,7 @@
         if (!list) return;
         list.replaceChildren();
         for (const text of callHistory.slice().reverse()) { const item = document.createElement('li'); item.textContent = text; list.append(item); }
-        if (!callHistory.length) { const item = document.createElement('li'); item.className = 'em-empty'; item.textContent = 'No calls recorded in this tab yet. Perform preparation, renewal, removal, or operator synchronization to see Identify results.'; list.append(item); }
+        if (!callHistory.length) { const item = document.createElement('li'); item.className = 'em-empty'; item.textContent = 'No calls recorded in this tab yet. Perform preparation, renewal, or removal to see Identify results.'; list.append(item); }
     }
     function recordIssuerCalls(response) {
         try {
@@ -85,7 +85,7 @@
         const credential = await navigator.credentials.get({ publicKey: assertionOptions(challenge.publicKey) });
         const result = await api(prefix + '/complete', { transaction_id: challenge.transaction_id, credential: assertionResponse(credential) });
         if (login) { location.assign(result.redirect); return; }
-        message('Ready. This browser and key can be used while emergency acceptance is on.', 'success');
+        message('Ready. This browser and key can be used for emergency login.', 'success');
         await list();
     }
     async function saveAndActivate(record) {
@@ -147,25 +147,6 @@
         }
         if (!ul.children.length) { const empty = element('li', 'em-empty'); empty.textContent =status && status.can_prepare ? 'This browser has no stored emergency credential yet. Choose Prepare this browser to create one.' : root.dataset.mode === 'prepare' ? 'This browser has no matching stored credential. Get a new normal login to prepare it.' : 'This browser has no stored emergency credential. Prepare it during a normal login before an outage.'; ul.append(empty); }
     }
-    async function operatorStatus() {
-        const status = await api('operator/status');
-        document.getElementById('operator-controls').hidden = false;
-        const stat = (label, value) => { const group = element('div'); const dd = element('dd'); dd.append(value); group.append(element('dt', null, label), dd); return group; };
-        document.getElementById('operator-state').replaceChildren(
-            stat('Emergency acceptance', status.accepting ? badge('on', 'On') : badge('off', 'Off')),
-            stat('Last successful sync', status.last_poll ? new Date(status.last_poll * 1000).toLocaleString() : 'Never'),
-            stat('Queued removals', String(status.queued_removals)));
-        const audit = document.getElementById('audit'); audit.replaceChildren();
-        status.audit.slice().reverse().forEach(text => audit.append(element('li', null, text)));
-        if (!status.audit.length) audit.append(element('li', 'em-empty', 'No local events recorded yet.'));
-    }
-    bind('operator-signin', async () => { const input = document.getElementById('operator-secret'); const secret = input.value; input.value = ''; await api('operator/signin', { secret }); location.reload(); }, 'submit');
-    bind('accept-on', async () => { await api('operator/acceptance', { enabled: true, minutes: Number(document.getElementById('minutes').value) }); location.reload(); });
-    bind('accept-off', async () => { await api('operator/acceptance', { enabled: false, minutes: 0 }); location.reload(); });
-    bind('block', async () => { await api('operator/block', { binding_id: document.getElementById('binding').value, whole_account: document.getElementById('whole-account').checked }); message('Blocked locally.', 'success'); await operatorStatus(); });
-    bind('poll', async () => { await api('operator/poll'); await operatorStatus(); message('Online synchronization completed.', 'success'); });
-    bind('operator-signout', async () => { await api('operator/signout'); location.reload(); });
     bind('signout', async () => { const result = await api('signout'); location.assign(result.redirect); });
-    if (root.dataset.mode === 'prepare' || (root.dataset.mode === 'login' && root.dataset.accepting === 'true')) safe(list)();
-    if (root.dataset.mode === 'operator' && !document.getElementById('operator-controls').hidden) safe(operatorStatus)();
+    if (root.dataset.mode === 'prepare' || root.dataset.mode === 'login') safe(list)();
 })();

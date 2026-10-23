@@ -17,14 +17,12 @@ namespace WebAppNetCore.Emergency.Tests
         [DataRow(true, false)]
         [DataRow(false, true)]
         [DataRow(true, true)]
-        public async Task Lifecycle_PrepareOfflineRestartAndAcceptance_EnforcesLocalState(bool elliptic, bool preserve)
+        public async Task Lifecycle_PrepareOfflineRestartAndLogin_EnforcesLocalState(bool elliptic, bool preserve)
         {
             // Arrange
             using var fixture = new ProtocolFixture(elliptic);
             fixture.Options.PreserveNormalClaims = preserve;
             JsonElement active = await fixture.Active();
-            string operatorId = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(operatorId, true, 60);
             int requests = fixture.Requests;
             fixture.Offline = true;
 
@@ -48,10 +46,7 @@ namespace WebAppNetCore.Emergency.Tests
             Assert.IsNull(principal.FindFirst("access_token"));
             CollectionAssert.AreEquivalent(new[] { "read-only" }, principal.FindAll("role").Select(claim => claim.Value).ToArray());
             Assert.IsNull(fixture.Service.Session(session.Id, "another-browser"));
-            operatorId = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(operatorId, false, 0);
-            Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
-            fixture.Service.Acceptance(operatorId, true, 60);
+            fixture.Service.SignOut(session.Id);
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
         }
 
@@ -119,8 +114,6 @@ namespace WebAppNetCore.Emergency.Tests
             fixture.Clock.Advance(1);
             string login = fixture.Login();
             JsonElement renewed = await fixture.Service.RenewAsync(login, fixture.Browser, fixture.Binding, CancellationToken.None);
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             // Act
             var session = await fixture.Prove(old, "login", null, 2);
             await fixture.Prove(renewed, "activate", login, 3);
@@ -137,7 +130,6 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement entry = await fixture.Active();
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 60);
             string token = entry.GetProperty("emergency_credential").GetString();
             JsonElement first = JsonSerializer.SerializeToElement(fixture.Service.Challenge(fixture.Browser, token, "login", null));
             JsonElement second = JsonSerializer.SerializeToElement(fixture.Service.Challenge(fixture.Browser, token, "login", null));
@@ -154,22 +146,17 @@ namespace WebAppNetCore.Emergency.Tests
             using var fixture = new ProtocolFixture();
             JsonElement entry = await fixture.Active();
             string login = fixture.Login();
-            string op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            fixture.Service.Acceptance(op, true, 60);
             var session = await fixture.Prove(entry, "login", null, 2);
             fixture.Offline = true;
             // Act
             await fixture.Service.RemoveAsync(login, fixture.Browser, fixture.Binding, CancellationToken.None);
             // Assert
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
-            JsonElement status = JsonSerializer.SerializeToElement(fixture.Service.OperatorStatus(op));
-            Assert.AreEqual(1, status.GetProperty("queued_removals").GetInt32());
-            fixture.Restart();
+            Assert.AreEqual(1, QueuedRemovals(fixture));
             Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
             fixture.Offline = false;
-            op = fixture.Service.OperatorSignIn(fixture.OperatorSecret);
-            await fixture.Service.SynchronizeAsync(op, CancellationToken.None);
-            Assert.AreEqual(0, JsonSerializer.SerializeToElement(fixture.Service.OperatorStatus(op)).GetProperty("queued_removals").GetInt32());
+            await fixture.Service.SynchronizeIssuerAsync(CancellationToken.None);
+            Assert.AreEqual(0, QueuedRemovals(fixture));
         }
 
         [TestMethod]
@@ -179,7 +166,6 @@ namespace WebAppNetCore.Emergency.Tests
             using var fixture = new ProtocolFixture();
             string login = fixture.Login();
             JsonElement pending = await fixture.Pending(login);
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 60);
             // Act and Assert
             Assert.ThrowsExactly<EmergencyFault>(() => fixture.Service.Challenge(fixture.Browser, pending.GetProperty("emergency_credential").GetString(), "login", null));
             fixture.Restart();
@@ -190,19 +176,18 @@ namespace WebAppNetCore.Emergency.Tests
         }
 
         [TestMethod]
-        public async Task DisabledMarker_ClearsAcceptanceWithoutDeletingPreparedState()
+        public async Task DisabledMarker_EndsSessionsWithoutDeletingPreparedState()
         {
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement entry = await fixture.Active();
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 60);
+            LocalSession session = await fixture.Prove(entry, "login", null, 2);
             // Act
             File.WriteAllText(Path.Combine(fixture.Options.StorageDirectory, "support-disabled"), "1");
             fixture.Restart();
             // Assert
-            Assert.IsFalse(fixture.Service.Accepting);
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 60);
-            Assert.IsNotNull(await fixture.Prove(entry, "login", null, 2));
+            Assert.IsNull(fixture.Service.Session(session.Id, fixture.Browser));
+            Assert.IsNotNull(await fixture.Prove(entry, "login", null, 3));
         }
 
         [TestMethod]
@@ -215,6 +200,17 @@ namespace WebAppNetCore.Emergency.Tests
             fixture.Service.Dispose();
             File.Delete(Path.Combine(fixture.Options.StorageDirectory, "state.bin"));
             Assert.ThrowsExactly<InvalidOperationException>(() => new ProtectedStateStore(fixture.Options, fixture.Protection, fixture.Verifier));
+        }
+        private static int QueuedRemovals(ProtocolFixture fixture)
+        {
+            fixture.Service.Dispose();
+            int count;
+            using (var state = new ProtectedStateStore(fixture.Options, fixture.Protection, fixture.Verifier))
+            {
+                count = state.Read(value => value.RemovalQueue.Count);
+            }
+            fixture.Restart();
+            return count;
         }
     }
 }

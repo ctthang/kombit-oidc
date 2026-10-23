@@ -87,14 +87,14 @@ namespace WebAppNetCore.Emergency.Tests
             StringAssert.Contains(response.Headers.CacheControl.ToString(), "no-store");
         }
         [TestMethod]
-        public async Task OperatorPage_AntiforgeryAndLocalSwitch_WorkThroughHttpPipeline()
+        public async Task LoginPage_AntiforgeryAndOriginGuards_WorkThroughHttpPipeline()
         {
             // Arrange
             using var fixture = new ProtocolFixture();
             using var server = Host(fixture, true);
             using var client = server.CreateClient();
             var cookies = new Dictionary<string, string>();
-            var page = await client.GetAsync(fixture.Options.Origin + "/emergency/operator");
+            var page = await client.GetAsync(fixture.Options.Origin + "/emergency/login");
             Assert.AreEqual(HttpStatusCode.OK, page.StatusCode);
             SaveCookies(page, cookies);
             string html = await page.Content.ReadAsStringAsync();
@@ -103,40 +103,13 @@ namespace WebAppNetCore.Emergency.Tests
             StringAssert.Contains(html, "Identify endpoint results (PoC)");
             Assert.AreEqual("[]", Encoding.UTF8.GetString(Convert.FromBase64String(page.Headers.GetValues("X-Emergency-Issuer-Calls").Single())));
             // Act and Assert
-            var missing = await Post(client, fixture, "operator/signin", new
-            {
-                secret = fixture.OperatorSecret
-            }, cookies, null);
+            var missing = await Post(client, fixture, "signout", new { }, cookies, null);
             Assert.AreEqual(HttpStatusCode.Forbidden, missing.StatusCode);
-            var login = await Post(client, fixture, "operator/signin", new
-            {
-                secret = fixture.OperatorSecret
-            }, cookies, csrf);
-            Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
-            SaveCookies(login, cookies);
-            var enabled = await Post(client, fixture, "operator/acceptance", new
-            {
-                enabled = true,
-                minutes = 5
-            }, cookies, csrf);
-            Assert.AreEqual(HttpStatusCode.NoContent, enabled.StatusCode);
-            var available = await client.GetAsync(fixture.Options.Origin + "/emergency/login");
-            Assert.AreEqual(HttpStatusCode.OK, available.StatusCode);
-            var crossOrigin = await Post(client, fixture, "operator/acceptance", new
-            {
-                enabled = false,
-                minutes = 0
-            }, cookies, csrf, "https://wrong.invalid");
+            var crossOrigin = await Post(client, fixture, "signout", new { }, cookies, csrf, "https://wrong.invalid");
             Assert.AreEqual(HttpStatusCode.Forbidden, crossOrigin.StatusCode);
+            var signedOut = await Post(client, fixture, "signout", new { }, cookies, csrf);
+            Assert.AreEqual(HttpStatusCode.OK, signedOut.StatusCode);
             Assert.AreEqual(0, fixture.Requests);
-            var stopped = await Post(client, fixture, "operator/acceptance", new
-            {
-                enabled = false,
-                minutes = 0
-            }, cookies, csrf);
-            Assert.AreEqual(HttpStatusCode.NoContent, stopped.StatusCode);
-            var unavailable = await client.GetAsync(fixture.Options.Origin + "/emergency/login");
-            Assert.AreEqual(HttpStatusCode.Forbidden, unavailable.StatusCode);
         }
         [TestMethod]
         public async Task Prepare_NormalSession_RendersLoginNavigationWithoutFormSubmission()

@@ -19,6 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WebAppNetCore.Emergency.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Update="Views\Account\RPIFrame.cshtml">
       <Pack>$(IncludeRazorContentInPack)</Pack>
     </Content>

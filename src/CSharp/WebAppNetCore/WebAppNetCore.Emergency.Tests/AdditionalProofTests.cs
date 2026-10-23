@@ -42,7 +42,6 @@ namespace WebAppNetCore.Emergency.Tests
             string login = fixture.Login();
             JsonElement issued = await fixture.Pending(login);
             await fixture.Prove(issued, "activate", login, 0);
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
             // Act and Assert
             Assert.IsNotNull(await fixture.Prove(issued, "login", null, 0));
         }
@@ -52,7 +51,6 @@ namespace WebAppNetCore.Emergency.Tests
             // Arrange
             using var fixture = new ProtocolFixture();
             JsonElement issued = await fixture.Active();
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 10);
             // Act and Assert
             await Assert.ThrowsExactlyAsync<EmergencyFault>(() => fixture.Prove(issued, "login", null, 1));
         }

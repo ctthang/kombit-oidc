@@ -79,13 +79,6 @@ namespace WebAppNetCore.Controllers
             }
             return normal.Properties.Items.TryGetValue("emergency_login", out string id) ? id : null;
         }
-        private async Task<string> Operator()
-        {
-            AuthenticateResult result = await HttpContext.AuthenticateAsync(EmergencyExtensions.OperatorScheme);
-            string id = result.Principal?.FindFirst("operator_id")?.Value;
-            runtime.Service.RequireOperator(id);
-            return id;
-        }
         private async Task<JsonElement> Body(params string[] fields)
         {
             if (Request.ContentLength > 70000)
@@ -117,17 +110,10 @@ namespace WebAppNetCore.Controllers
         public async Task<IActionResult> Prepare()
         {
             string login = await Normal();
-            return View("Page", new EmergencyPageModel { Mode = "prepare", CanPrepare = runtime.Service.HasLogin(login, EmergencyBrowser.Read(HttpContext)), Accepting = runtime.Accepting });
+            return View("Page", new EmergencyPageModel { Mode = "prepare", CanPrepare = runtime.Service.HasLogin(login, EmergencyBrowser.Read(HttpContext)) });
         }
         [HttpGet("login")]
-        public IActionResult Login()
-        {
-            if (!runtime.Accepting)
-            {
-                Response.StatusCode = 403;
-            }
-            return View("Page", new EmergencyPageModel { Mode = "login", Accepting = runtime.Accepting });
-        }
+        public IActionResult Login() => View("Page", new EmergencyPageModel { Mode = "login" });
         [HttpGet("home")]
         public IActionResult Home()
         {
@@ -138,7 +124,7 @@ namespace WebAppNetCore.Controllers
             return View("Home");
         }
         [HttpGet("ended")]
-        public IActionResult Ended() => View("Page", new EmergencyPageModel { Mode = "ended", Accepting = runtime.Accepting });
+        public IActionResult Ended() => View("Page", new EmergencyPageModel { Mode = "ended" });
         [HttpGet("normal-login")]
         public IActionResult NormalLogin()
         {
@@ -237,64 +223,6 @@ namespace WebAppNetCore.Controllers
             {
                 redirect = Url.Action(nameof(Ended))
             });
-        }
-        [HttpGet("operator")]
-        public async Task<IActionResult> OperatorPage()
-        {
-            bool authenticated = false;
-            try
-            {
-                await Operator();
-                authenticated = true;
-            }
-            catch (EmergencyFault) { }
-            return View("Page", new EmergencyPageModel { Mode = "operator", OperatorAuthenticated = authenticated, Accepting = runtime.Accepting });
-        }
-        [HttpPost("operator/signin")]
-        public async Task<IActionResult> OperatorSignIn()
-        {
-            JsonElement body = await Body("secret");
-            string id = runtime.Service.OperatorSignIn(StrictJson.Text(body, "secret", 512));
-            await HttpContext.SignInAsync(EmergencyExtensions.OperatorScheme, new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("operator_id", id) }, "LocalEmergencyOperator")), new AuthenticationProperties { IsPersistent = false, AllowRefresh = false, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(15) });
-            return Json(new
-            {
-                authenticated = true
-            });
-        }
-        [HttpPost("operator/signout")]
-        public async Task<IActionResult> OperatorSignOut()
-        {
-            await Body();
-            runtime.Service.OperatorSignOut(await Operator());
-            await HttpContext.SignOutAsync(EmergencyExtensions.OperatorScheme);
-            return NoContent();
-        }
-        [HttpPost("operator/status")]
-        public async Task<IActionResult> OperatorStatus()
-        {
-            await Body();
-            return Json(runtime.Service.OperatorStatus(await Operator()));
-        }
-        [HttpPost("operator/acceptance")]
-        public async Task<IActionResult> Acceptance()
-        {
-            JsonElement body = await Body("enabled", "minutes");
-            runtime.Service.Acceptance(await Operator(), body.GetProperty("enabled").GetBoolean(), checked((int)StrictJson.Integer(body, "minutes")));
-            return NoContent();
-        }
-        [HttpPost("operator/block")]
-        public async Task<IActionResult> Block()
-        {
-            JsonElement body = await Body("binding_id", "whole_account");
-            runtime.Service.OperatorBlock(await Operator(), StrictJson.Text(body, "binding_id", 128), body.GetProperty("whole_account").GetBoolean());
-            return NoContent();
-        }
-        [HttpPost("operator/poll")]
-        public async Task<IActionResult> Poll()
-        {
-            await Body();
-            await runtime.Service.SynchronizeAsync(await Operator(), HttpContext.RequestAborted);
-            return NoContent();
         }
     }
 }

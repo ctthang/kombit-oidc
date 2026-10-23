@@ -12,7 +12,6 @@ namespace WebAppNetCore.EmergencyCredential
     public static class EmergencyExtensions
     {
         public const string CookieScheme = "EmergencyCookie";
-        public const string OperatorScheme = "EmergencyOperator";
         public static void AddEmergencyCredential(this IServiceCollection services, IConfiguration configuration)
         {
             EmergencyOptions options = new EmergencyOptions();
@@ -25,7 +24,7 @@ namespace WebAppNetCore.EmergencyCredential
             services.AddSingleton<EmergencyProtection>(provider => new EmergencyProtection(options));
             services.AddSingleton(provider => new EmergencyRuntime(options, provider.GetRequiredService<EmergencyProtection>().Provider,
                 provider.GetRequiredService<IHttpClientFactory>(), provider.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>(), provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<EmergencyRuntime>>()));
-            services.AddAuthentication().AddCookie(CookieScheme, ConfigureCookie).AddCookie(OperatorScheme, ConfigureCookie);
+            services.AddAuthentication().AddCookie(CookieScheme, ConfigureCookie);
         }
         private static void ConfigureCookie(CookieAuthenticationOptions options)
         {

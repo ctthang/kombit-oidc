@@ -139,7 +139,6 @@ namespace WebAppNetCore.Emergency.Tests
             fixture.NormalClaims = NormalAccessTokenSnapshot.Validate(token.Access, token.Id, Issuer, "client", new[] { token.Key }).Claims;
             var active = await fixture.Active();
             fixture.NormalClaims.Single(c => c.Type == "name").Value = "Changed Later";
-            fixture.Service.Acceptance(fixture.Service.OperatorSignIn(fixture.OperatorSecret), true, 60);
             int requests = fixture.Requests;
             fixture.Offline = true;
             fixture.Restart();

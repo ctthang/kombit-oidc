@@ -75,12 +75,9 @@ For an installed tenant, this is the Runtime configuration under that tenant, no
 
 ### 4. Provision process secrets
 
-Use distinct random backend and operator secrets of 32–512 characters. Short placeholders do not work, even when the environment variables exist. Generate values from a cryptographic random-number generator, not a memorable password. The backend value must be the same in Identify and the sample. The operator value belongs only to the sample. Neither value is the normal OIDC client secret.
+Use a random backend secret of 32–512 characters. Short placeholders do not work, even when the environment variable exists. Generate the value from a cryptographic random-number generator, not a memorable password. The value must be the same in Identify and the sample. It is not the normal OIDC client secret.
 
-The example variable names are:
-
-- `OIDC_EMERGENCY_ISSUER_KEY`: available to both application processes.
-- `OIDC_EMERGENCY_OPERATOR_KEY`: available to the sample process.
+The example variable name is `OIDC_EMERGENCY_ISSUER_KEY`; make it available to both application processes.
 
 Use your secret store or IIS application-pool environment variables. An interactive PowerShell variable is not inherited by an already running IIS worker. A machine environment variable being present also does not prove that an existing worker has received it. Configure the intended pools and restart them. Keep secret values out of JSON templates, source control, command output, and browser code.
 
@@ -139,13 +136,7 @@ The response must be HTTP 200 with a `keys` array containing the emergency signi
 
 After the issuer, trust file, directory permissions, and process secrets are ready, set the deployed `EmergencyCredential.Enabled` value to `true`. Stop and start the sample pool. Keep `state` and `protection` persistent and run one worker process for this PoC.
 
-Open `/emergency/operator` to check the local setup. Use the value of `OIDC_EMERGENCY_OPERATOR_KEY` for the operator sign-in; this is not your normal Identify password. Retrieve it locally from the configured secret store without posting it in chat or source files. If you provisioned the operator key as a machine environment variable, copy it locally with PowerShell and paste it into the operator sign-in form:
-
-```powershell
-[Environment]::GetEnvironmentVariable('OIDC_EMERGENCY_OPERATOR_KEY', 'Machine') | Set-Clipboard
-```
-
-The command copies the value without printing it. Clear the clipboard after use. The operator key is not needed for normal Identify login or browser preparation. Support enabled and local emergency acceptance are separate switches. Leave acceptance off until a browser has completed preparation and the operator intentionally activates it. Log out and perform a fresh normal login after enabling the issuer: old login sessions have no newly captured preparation record.
+Open `/emergency/login` to check the local setup. Emergency login is available as soon as support is enabled; there is no separate acceptance switch. A browser can log in once it has completed preparation. Log out and perform a fresh normal login after enabling the issuer: old login sessions have no newly captured preparation record.
 
 Private JWE keys use machine-bound DPAPI with an audience-specific purpose. The emergency Data Protection key ring also uses DPAPI on Windows. Retain the key, state, and protection directories and their ACLs. Copying them to another machine is not a supported recovery procedure. No secret or private key belongs in source control.
 
@@ -164,14 +155,13 @@ Private JWE keys use machine-bound DPAPI with an audience-specific purpose. The 
 
 - After normal login, open **Prepare emergency access**. The accepted ID token needs `iss`, `sub`, `jti`, and `iat`. Preparation evidence lasts ten minutes. Userinfo-only claims do not become emergency authorization.
 - Choose **Prepare this browser**. Finish registration, IndexedDB storage/read-back, and the separate possession check. Readiness requires all three. Use a key with user verification and without passkey backup.
-- Sign in at `/emergency/operator` and activate local acceptance. Its optional duration is 0–1,440 minutes; 0 has no window end. Emergency sessions still end within eight hours and before EC expiry.
-- During an outage, use `/emergency/login`. Login, home, and local logout use no Identify request, OP iframe, or normal token operation.
-- Preparation and renewal synchronize issuer state and signing trust while online. A changed issuer `state_id` blocks old credentials and sessions, disables local acceptance, and requires new preparation. Failed trust refresh remains blocked across restart. Offline login does not perform this synchronization.
+- During an outage, use `/emergency/login`. A prepared browser can log in immediately; no operator approval is needed. Emergency sessions end within eight hours and before EC expiry. Login, home, and local logout use no Identify request, OP iframe, or normal token operation.
+- Preparation and renewal synchronize issuer state and signing trust while online. A changed issuer `state_id` blocks old credentials and sessions and requires new preparation. Failed trust refresh remains blocked across restart. Offline login does not perform this synchronization.
 - Renew after a newer normal login. The old EC stays active until its replacement is stored and confirmed. Pending entries can be confirmed later. Failed delivery can leave an issuer binding that needs recovery.
-- Remove keys locally first. Failed issuer reports remain queued. The operator's explicit online synchronization refreshes trust, applies revocations, and retries removals. There is no automatic network polling in the emergency flow.
-- Turning acceptance off invalidates current sessions. Turning it on does not revive their cookies. Key/account blocks also apply to current sessions.
+- Remove keys locally first. Failed issuer reports remain queued. The next preparation or renewal refreshes trust, applies revocations, and retries removals. There is no automatic network polling in the emergency flow.
+- Removing a key, or an issuer revocation applied during synchronization, also ends current sessions for that key.
 
-To disable support, set only `EmergencyCredential.Enabled=false` and restart while retaining the external storage-path configuration. Startup marks existing state for acceptance reset without loading private keys. Re-enabling requires explicit local activation. Removing the path configuration is not the supported disable procedure.
+To disable support, set only `EmergencyCredential.Enabled=false` and restart while retaining the external storage-path configuration. Startup marks existing state so that current emergency sessions end, without loading private keys. Removing the path configuration is not the supported disable procedure.
 
 ## Build and check
 
@@ -187,17 +177,17 @@ The current emergency suite passes 57 tests, including issuer-state changes, leg
 
 ## PoC limits
 
-This is one process with bounded local state. Protection does not prevent a trusted host administrator from restoring old state. There is no trusted hardware-attestation policy, multi-node coordination, production operator identity, automated encryption-key rotation, or rollback-proof recovery. Issuer-state recovery blocks previous credentials and requires new preparation. Offline authorization can be stale. Browser data deletion loses preparation.
+This is one process with bounded local state. Protection does not prevent a trusted host administrator from restoring old state. There is no trusted hardware-attestation policy, multi-node coordination, automated encryption-key rotation, or rollback-proof recovery. Issuer-state recovery blocks previous credentials and requires new preparation. Offline authorization can be stale. Browser data deletion loses preparation.
 
 Local claim/role allowlists reduce the signed snapshot. Normal assurance, tokens, session IDs, and reserved markers are excluded. The OIDC example grants no basic privilege XML. Existing normal-demo token diagnostics remain outside emergency behavior. Real normal SSO/logout, physical authenticators, other deployment combinations, and production dependency review still need evidence.
 
 ## PoC: inspect Identify endpoint results
 
-Expand **Identify endpoint results (PoC)** on any emergency page. Perform preparation, renewal, key removal, or **Synchronize with Identify now** to see the backend calls made by that action. Each entry shows the HTTP method, endpoint template, HTTP status, elapsed milliseconds, and a redacted result summary. Network failures and rejected response bodies are distinguished from HTTP failures. A successful issuer response is not proof that local credential validation or preparation completed.
+Expand **Identify endpoint results (PoC)** on any emergency page. Perform preparation, renewal, or key removal to see the backend calls made by that action. Each entry shows the HTTP method, endpoint template, HTTP status, elapsed milliseconds, and a redacted result summary. Network failures and rejected response bodies are distinguished from HTTP failures. A successful issuer response is not proof that local credential validation or preparation completed.
 
-Local operations such as authenticator possession checks, emergency login, acceptance changes, and local logout show **no Identify endpoint called** when their backend request makes no issuer call. Viewing the panel never contacts Identify or repeats an operation.
+Local operations such as authenticator possession checks, emergency login, and local logout show **no Identify endpoint called** when their backend request makes no issuer call. Viewing the panel never contacts Identify or repeats an operation.
 
-The panel keeps the latest 40 entries in this tab's session storage, including across redirects to the emergency home page. Each action includes at most its latest 8 issuer calls (synchronization may paginate). **Clear displayed history** removes only this display history; it does not remove credentials, revoke keys, or change acceptance. If session storage is unavailable, the panel works until navigation. Existing calls from before this version was loaded are not reconstructed.
+The panel keeps the latest 40 entries in this tab's session storage, including across redirects to the emergency home page. Each action includes at most its latest 8 issuer calls (synchronization may paginate). **Clear displayed history** removes only this display history; it does not remove credentials or revoke keys. If session storage is unavailable, the panel works until navigation. Existing calls from before this version was loaded are not reconstructed.
 
 Results contain no request/response bodies, API keys, token references, emergency credential values, enrollment IDs, binding IDs, subjects, or personal claims. HTTP statuses and fixed summaries are returned only on the originating request via the bounded `X-Emergency-Issuer-Calls` response header. This is a demonstration aid, not a durable audit log.
 
@@ -223,7 +213,7 @@ The sample obtains the access token only from the server-side authorization-code
 
 There is no audience allowlist in this mode: the token comes from the same backend code exchange and is bound to this client and user. The received `aud` is not used as its own expected value and is not used to authorize calls to an API. The emergency application continues to apply its local role/privilege restrictions. This behavior must not be reused as a general API access-token validator.
 
-The snapshot contains only bounded claim types/values/value types; token strings, token metadata, normal assurance claims, scopes, and token bindings are excluded. It is attached to the specific verified emergency credential only after issuer/subject/normal-login reference checks succeed, and saved in the application's existing protected state. It is separate from the issuer-signed `claims_snapshot`. Browser IndexedDB still stores only the issuer credential, so replacing browser data cannot replace the local claim snapshot. Local claims survive restart and offline login. Role changes after preparation are not reflected until renewal or local blocking.
+The snapshot contains only bounded claim types/values/value types; token strings, token metadata, normal assurance claims, scopes, and token bindings are excluded. It is attached to the specific verified emergency credential only after issuer/subject/normal-login reference checks succeed, and saved in the application's existing protected state. It is separate from the issuer-signed `claims_snapshot`. Browser IndexedDB still stores only the issuer credential, so replacing browser data cannot replace the local claim snapshot. Local claims survive restart and offline login. Role changes after preparation are not reflected until renewal or key removal.
 
 Deploy only the updated OIDC sample and enable the two flags above. No new Identify OAuth2 change is required: it retains its original ID-token-based emergency issuance record. The previously deployed issuer endpoint feature remains required. SAML continues to use assertion claims and needs no deployment for this OIDC change.
 

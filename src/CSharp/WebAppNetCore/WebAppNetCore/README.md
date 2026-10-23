@@ -78,4 +78,4 @@ When enabling back-channel or front-channel logout on the Identify's OIDC connec
 
 ## Optional emergency access
 
-Emergency support is disabled by default. See [the emergency PoC guide](README-emergency.md) for configuration, preparation, local operator controls, tests, and known limits.
+Emergency support is disabled by default. See [the emergency PoC guide](README-emergency.md) for configuration, preparation, emergency login, tests, and known limits.
