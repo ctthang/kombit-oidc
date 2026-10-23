@@ -79,7 +79,7 @@ The script keeps rollback copies and restores changed configuration, binaries, t
 |---|---|
 | Identify settings | `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\issuer-settings.json` |
 | Identify state | `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\state` |
-| Sample external settings source | `C:\ProgramData\SafewhereSamples\OidcEmergency\dev520\emergency-settings.json` |
+| Sample external settings source | `C:\ProgramData\SafewhereSamples\OidcEmergency\emergency-settings.json` |
 | Sample effective settings | `C:\inetpub\wwwroot\kombitoidc\appsettings.json`, section `EmergencyCredential` |
 | Sample private encryption key | `C:\ProgramData\SafewhereSamples\OidcEmergency\decryption-key.bin` |
 | Sample public encryption JWK | `C:\ProgramData\SafewhereSamples\OidcEmergency\encryption-public.jwk.json` |
@@ -110,7 +110,7 @@ The user must sign out and perform a fresh normal login, open `/emergency`, and 
 
 Verified the newly deployed dev520 Runtime and OIDC application support direct `ApiKey` configuration. Updated `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\issuer-settings.json` to use the existing backend key values directly in each client entry and set record/enrollment/credential lifetimes to 24 hours / 1 hour / 30 days. No key rotation or state deletion was performed.
 
-Updated `C:\ProgramData\SafewhereSamples\OidcEmergency\dev520\emergency-settings.json` and synchronized its `EmergencyCredential` section to `C:\inetpub\wwwroot\kombitoidc\appsettings.json`, because the application does not automatically load the external JSON. Removed retired access-token, operator, and claim-filter options. Enabled the dedicated emergency Information-level logging category for Console and Debug providers. Existing identifiers, encryption/trust files, protection keys, and state paths were preserved.
+Updated `C:\ProgramData\SafewhereSamples\OidcEmergency\emergency-settings.json` and synchronized its `EmergencyCredential` section to `C:\inetpub\wwwroot\kombitoidc\appsettings.json`, because the application does not automatically load the external JSON. Removed retired access-token, operator, and claim-filter options. Enabled the dedicated emergency Information-level logging category for Console and Debug providers. Existing identifiers, encryption/trust files, protection keys, and state paths were preserved.
 
 Stopped and started only Identify dev520 and the OIDC pool. Both health endpoints returned HTTP 200; the OIDC response included its diagnostic reference header. Verified the configured OIDC API keys match. Configuration backups are at `C:\ProgramData\Safewhere\EmergencyIssuer\dev520\backups\poc-settings-20261023-160041` (settings-0.json=issuer, settings-1.json=external OIDC, settings-2.json=deployed appsettings).
 
@@ -131,3 +131,12 @@ The first retry was rejected by the authenticator because the failed earlier reg
 ### Successful end-to-end OIDC verification
 
 The clean retry completed registration, credential storage, and possession verification. The new credential became Active and expires on November 22, 2026, confirming the 30-day issuer lifetime. Emergency login with that credential then succeeded. The emergency home page displays the original ID-token snapshot, including sub, sid, jti, repeated aud values, nonce, at_hash, azp, iat, nbf, exp, and iss, alongside locally generated emergency-session controls. No raw token or claim value is recorded here. The active session's own eight-hour limit remains independent of the credential lifetime and original ID-token expiry.
+
+
+## 23 October 2026: flat configuration and missing browser copies
+
+Moved the sample's live files to `C:\ProgramData\SafewhereSamples\OidcEmergency`, without a tenant subdirectory. The settings file is now `emergency-settings.json`. Existing encryption keys, trust, and protected state were preserved. Backups are in `backups\flat-layout-20261023-164425`. Only the two sample pools were stopped/started; Identify was unchanged.
+
+The deployed OIDC settings were already using root-level key/state paths, so moving the external setup JSON required no application-settings change.
+
+Deployed the updated browser script. It removes **Forget browser copy** and shows account registrations whose browser copy is missing during normal-login preparation. The existing SAML registration has not been revoked automatically: remove it using the authenticated preparation page before retrying enrollment. The normal-login capture is in memory and must be renewed after a pool restart.

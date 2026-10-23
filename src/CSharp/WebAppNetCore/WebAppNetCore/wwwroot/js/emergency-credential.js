@@ -171,7 +171,6 @@
             const actions = element('div', 'em-actions');
             if (root.dataset.mode === 'login') {
                 if (!expired) actions.append(button('Log in with this key', () => possession(record, true), 'em-primary'));
-                actions.append(button('Forget browser copy', async () => { if (!confirm('Forget all copies of this key in this browser? This does not revoke its server registration.')) return; await deleteStoredBinding(record.binding_id); message('Browser copies removed. Server registration was not changed.', 'success'); await list(); }));
             } else {
                 const binding = element('p', 'em-credential-meta', 'Binding ID ');
                 binding.append(element('code', null, record.binding_id));
@@ -182,6 +181,26 @@
             }
             if (actions.children.length) row.append(actions);
             ul.append(row);
+        }
+        // A lost browser copy must not hide the account's server registration.
+        if (status) {
+            const missing = new Map();
+            for (const entry of status.credentials) {
+                if (!records.some(record => record.binding_id === entry.binding_id && status.credentials.some(item => item.ec_id === record.ec_id))) missing.set(entry.binding_id, entry);
+            }
+            for (const entry of missing.values()) {
+                const row = element('li', 'em-credential');
+                row.append(element('span', 'em-credential-name', 'Key …' + entry.binding_id.slice(-6)),
+                    element('p', 'em-credential-meta', 'Browser copy missing. Remove this registration before preparing the same authenticator again. This also ends its emergency sessions in other browsers.'));
+                row.append(button('Remove key locally', async () => {
+                    if (!confirm('Remove registration for key …' + entry.binding_id.slice(-6) + ' and end its emergency sessions?')) return;
+                    await api('keys/' + encodeURIComponent(entry.binding_id) + '/remove');
+                    await deleteStoredBinding(entry.binding_id);
+                    message('Registration removed locally. If Identify is unavailable, its revocation is queued; wait for it to synchronize before preparing this key again.', 'success');
+                    await list();
+                }, 'em-danger'));
+                ul.append(row);
+            }
         }
         if (!ul.children.length) { const empty = element('li', 'em-empty'); empty.textContent =status && status.can_prepare ? 'This browser has no stored emergency credential yet. Choose Prepare this browser to create one.' : root.dataset.mode === 'prepare' ? 'This browser has no matching stored credential. Get a new normal login to prepare it.' : 'This browser has no stored emergency credential. Prepare it during a normal login before an outage.'; ul.append(empty); }
     }
