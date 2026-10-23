@@ -492,7 +492,7 @@ namespace WebAppNetCore.EmergencyCredential
         }
         public string OperatorSignIn(string secret)
         {
-            if (secret == null || secret.Length > 512 || !StrictJson.Same(secret, EmergencyOptions.Secret(options.OperatorKeyEnvironmentVariable)))
+            if (secret == null || secret.Length > 512 || secret != EmergencyOptions.Secret(options.OperatorKeyEnvironmentVariable))
             {
                 throw new EmergencyFault(401, "operator_not_authenticated");
             }
