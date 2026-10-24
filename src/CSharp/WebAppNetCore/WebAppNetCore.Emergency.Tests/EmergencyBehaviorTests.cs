@@ -13,6 +13,38 @@ namespace WebAppNetCore.Emergency.Tests
     public class EmergencyBehaviorTests
     {
         [TestMethod]
+        public async Task Restart_ChangedPocOrigin_PreservesRegistryWithoutHashApproval()
+        {
+            using var fixture = new ProtocolFixture();
+            await fixture.Active();
+            fixture.Options.Origin = "https://changed.fixture.invalid";
+            fixture.Options.RelyingPartyId = "changed.fixture.invalid";
+            fixture.Restart();
+            var status = JsonSerializer.SerializeToElement(fixture.Service.Status(fixture.Login(), fixture.Browser));
+            Assert.AreEqual(1, status.GetProperty("credentials").GetArrayLength());
+        }
+
+        [TestMethod]
+        public async Task LoginVisibility_UsesLocalActiveStateOffline()
+        {
+            using var fixture = new ProtocolFixture();
+            string login = fixture.Login();
+            JsonElement pending = await fixture.Pending(login);
+            string compact = pending.GetProperty("emergency_credential").GetString();
+            Assert.IsFalse(fixture.Service.IsActiveForLogin(compact));
+            await fixture.Prove(pending, "activate", login, 1);
+            fixture.Offline = true;
+            int requests = fixture.Requests;
+            Assert.IsTrue(fixture.Service.IsActiveForLogin(compact));
+            Assert.IsFalse(fixture.Service.IsActiveForLogin("invalid"));
+            Assert.AreEqual(requests, fixture.Requests);
+            fixture.Restart();
+            Assert.IsTrue(fixture.Service.IsActiveForLogin(compact));
+            await fixture.Service.RemoveAsync(fixture.Login(), fixture.Browser, pending.GetProperty("binding_id").GetString(), CancellationToken.None);
+            Assert.IsFalse(fixture.Service.IsActiveForLogin(compact));
+        }
+
+        [TestMethod]
         public void BackendKey_UsesConfiguredPocTextWithoutEnvironment()
         {
             Assert.AreEqual("poc-key", new EmergencyOptions { ApiKey = "poc-key" }.BackendKey());

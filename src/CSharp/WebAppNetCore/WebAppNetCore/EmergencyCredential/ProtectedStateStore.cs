@@ -26,16 +26,6 @@ namespace WebAppNetCore.EmergencyCredential
             string disabled = Path.Combine(options.StorageDirectory, "support-disabled");
             try
             {
-                string fingerprint = StrictJson.Hash(JsonSerializer.Serialize(new
-                {
-                    options.Issuer,
-                    options.NormalIssuer,
-                    options.Audience,
-                    options.Origin,
-                    options.RelyingPartyId,
-                    options.EncryptionKeyId,
-                    encryption = verifier.KeyFingerprint()
-                }));
                 if (File.Exists(path))
                 {
                     if (new FileInfo(path).Length > 16777216)
@@ -43,7 +33,7 @@ namespace WebAppNetCore.EmergencyCredential
                         throw new InvalidOperationException();
                     }
                     state = JsonSerializer.Deserialize<LocalState>(protector.Unprotect(File.ReadAllBytes(path)));
-                    if (state == null || state.Version != 1 || state.ConfigurationHash != fingerprint || state.Bindings == null || state.Credentials == null || state.Sessions == null)
+                    if (state == null || state.Version != 1 || state.Bindings == null || state.Credentials == null || state.Sessions == null)
                     {
                         throw new InvalidOperationException();
                     }
@@ -67,7 +57,7 @@ namespace WebAppNetCore.EmergencyCredential
                     }
                     string keys = File.ReadAllText(options.TrustedSigningKeysFile);
                     CredentialVerifier.ValidateKeys(keys);
-                    state = new LocalState { ConfigurationHash = fingerprint, SigningKeys = keys };
+                    state = new LocalState { SigningKeys = keys };
                     Persist(state);
                 }
                 if (File.Exists(disabled))

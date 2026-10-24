@@ -185,6 +185,12 @@ namespace WebAppNetCore.Controllers
                 ready = true
             });
         }
+        [HttpPost("login/status")]
+        public async Task<IActionResult> LoginStatus()
+        {
+            JsonElement body = await Body("emergency_credential");
+            return Json(new { active = runtime.Service.IsActiveForLogin(StrictJson.Text(body, "emergency_credential", 65536)) });
+        }
         [HttpPost("login/options")]
         public async Task<IActionResult> LoginOptions()
         {

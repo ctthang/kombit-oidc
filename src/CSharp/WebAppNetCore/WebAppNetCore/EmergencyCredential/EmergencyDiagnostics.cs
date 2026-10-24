@@ -50,7 +50,7 @@ namespace WebAppNetCore.EmergencyCredential
                 case "/emergency": case "/emergency/login": case "/emergency/home": case "/emergency/ended":
                 case "/emergency/normal-login": case "/emergency/enrollments": case "/emergency/renewals":
                 case "/emergency/status": case "/emergency/possession/options": case "/emergency/possession/complete":
-                case "/emergency/login/options": case "/emergency/login/complete": case "/emergency/signout": return path;
+                case "/emergency/login/status": case "/emergency/login/options": case "/emergency/login/complete": case "/emergency/signout": return path;
             }
             if (path != null && path.StartsWith("/emergency/enrollments/", StringComparison.Ordinal))
             {

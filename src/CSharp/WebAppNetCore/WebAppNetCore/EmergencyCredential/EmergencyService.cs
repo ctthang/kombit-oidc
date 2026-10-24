@@ -208,6 +208,20 @@ namespace WebAppNetCore.EmergencyCredential
             return response;
         }
 
+        // Read-only local eligibility: no issuer call, challenge, or session is created.
+        public bool IsActiveForLogin(string compact)
+        {
+            try
+            {
+                VerifiedCredential credential = credentials.Verify(compact, store.Read(state => state.SigningKeys), clock.GetUtcNow());
+                lock (store.Gate)
+                {
+                    return store.Read(state => Entry(state, credential.Id, "active").Credential.Digest == credential.Digest);
+                }
+            }
+            catch (EmergencyFault) { return false; }
+        }
+
         public object Challenge(string browser, string compact, string purpose, string loginId)
         {
             VerifiedCredential credential = credentials.Verify(compact, store.Read(state => state.SigningKeys), clock.GetUtcNow());

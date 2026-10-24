@@ -5,7 +5,6 @@ namespace WebAppNetCore.EmergencyCredential
     public sealed class LocalState
     {
         public int Version { get; set; } = 1;
-        public string ConfigurationHash { get; set; }
         public string SigningKeys { get; set; }
         public long Generation { get; set; }
         public string IssuerStateId { get; set; }
